@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import type { ApiResponse } from '@/types';
 
 export class AppError extends Error {
@@ -30,9 +30,9 @@ export function apiError(
 
 /** Wrap API route handler with error catching */
 export function withErrorHandler(
-  handler: (req: Request) => Promise<NextResponse>
+  handler: (req: NextRequest) => Promise<NextResponse>
 ) {
-  return async (req: Request): Promise<NextResponse> => {
+  return async (req: NextRequest): Promise<NextResponse> => {
     try {
       return await handler(req);
     } catch (error) {
