@@ -15,10 +15,10 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: 'VegaMate - AI Companion Gacha',
+    default: 'VegaMate - Companion Gacha',
     template: '%s | VegaMate',
   },
-  description: 'Chat with stunning AI companions. Build intimacy. Pull gacha for their exclusive wallpapers. Male & female characters.',
+  description: 'Chat with anime characters who remember you. Pull gacha for their exclusive photos. Male & female companions available.',
   keywords: ['AI companion', 'AI boyfriend', 'AI girlfriend', 'gacha', 'wallpaper', 'collection'],
   manifest: '/manifest.json',
   appleWebApp: {
@@ -29,13 +29,23 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     siteName: 'VegaMate',
-    title: 'VegaMate - AI Companion Gacha',
-    description: 'Chat with AI companions, collect their exclusive photos through gacha pulls.',
+    title: 'VegaMate - Companion Gacha',
+    description: 'Chat with anime characters who remember you. Pull gacha for their exclusive photos.',
+    url: 'https://vegamate.com',
+    images: [
+      {
+        url: 'https://vegamate.com/og-image.jpg',
+        width: 1200,
+        height: 630,
+        alt: 'VegaMate - Companion Gacha with Fantasy and Modern characters',
+      },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'VegaMate - AI Companion Gacha',
-    description: 'Chat with AI companions, collect their exclusive photos through gacha pulls.',
+    title: 'VegaMate - Companion Gacha',
+    description: 'Chat with anime characters who remember you. Pull gacha for their exclusive photos.',
+    images: ['https://vegamate.com/og-image.jpg'],
   },
   robots: {
     index: true,
