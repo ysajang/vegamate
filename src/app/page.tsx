@@ -1,6 +1,4 @@
-import { PreregisterForm } from '@/components/landing/preregister-form';
-import { RarityShowcase } from '@/components/landing/rarity-showcase';
-import { FeatureGrid } from '@/components/landing/feature-grid';
+import { ThemeSelector } from '@/components/landing/theme-selector';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -24,59 +22,34 @@ export default function LandingPage() {
         <div className="absolute right-0 top-1/2 h-[300px] w-[300px] translate-x-1/2 rounded-full bg-amber-500/5 blur-[80px]" />
       </div>
 
-      {/* Hero — compact */}
-      <section className="flex w-full max-w-lg flex-col items-center gap-3 px-6 pb-3 pt-10">
-        <div className="relative flex h-14 w-14 items-center justify-center">
+      {/* Hero */}
+      <section className="flex w-full max-w-lg flex-col items-center gap-2 px-6 pb-2 pt-10">
+        <div className="relative flex h-12 w-12 items-center justify-center">
           <div className="absolute inset-0 animate-pulse rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 opacity-20 blur-lg" />
-          <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-fuchsia-600 text-2xl font-bold text-white shadow-lg shadow-violet-500/25">
+          <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-fuchsia-600 text-xl font-bold text-white shadow-lg shadow-violet-500/25">
             V
           </div>
         </div>
 
-        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
           <span className="bg-gradient-to-r from-violet-400 via-fuchsia-400 to-amber-400 bg-clip-text text-transparent">
             VegaMate
           </span>
         </h1>
         <p className="text-center text-sm font-medium text-muted-foreground">
-          Meet Your AI Companion. Collect Their Exclusive Photos.
+          AI Companion Gacha — Chat, Bond, Collect
         </p>
-
-        {/* Flow pills — inline */}
-        <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
-          <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[11px] font-medium text-violet-300">
-            💬 Chat
-          </span>
-          <span className="text-xs text-muted-foreground/40">→</span>
-          <span className="rounded-full bg-fuchsia-500/10 px-2 py-0.5 text-[11px] font-medium text-fuchsia-300">
-            💕 Bond
-          </span>
-          <span className="text-xs text-muted-foreground/40">→</span>
-          <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-300">
-            🎰 Pull
-          </span>
-          <span className="text-xs text-muted-foreground/40">→</span>
-          <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-300">
-            📸 Collect
-          </span>
-        </div>
+        <p className="max-w-xs text-center text-xs leading-relaxed text-muted-foreground/60">
+          Chat with AI characters who remember you.
+          Pull gacha for their exclusive photos —
+          from casual selfies to stunning shots.
+          Male &amp; female companions available.
+        </p>
       </section>
 
-      {/* Features — tight 2x2 */}
-      <section className="w-full px-6 pb-3 pt-2">
-        <FeatureGrid />
-      </section>
-
-      {/* Rarity — compact list */}
-      <section className="w-full px-6 pb-3">
-        <RarityShowcase />
-      </section>
-
-      {/* Pre-register form with 18+ */}
-      <section className="w-full px-6 pb-6" id="signup">
-        <div className="flex flex-col items-center">
-          <PreregisterForm />
-        </div>
+      {/* Theme A/B selector -> Pre-register */}
+      <section className="w-full px-6 pb-6 pt-3" id="signup">
+        <ThemeSelector />
       </section>
 
       {/* Footer */}

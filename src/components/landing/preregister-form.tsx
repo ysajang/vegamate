@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 
 type FormState = 'idle' | 'submitting' | 'success';
 
-export function PreregisterForm() {
+export function PreregisterForm({ themePreference }: { themePreference?: string }) {
   const [email, setEmail] = useState('');
   const [willingToPay, setWillingToPay] = useState(false);
   const [ageConfirmed, setAgeConfirmed] = useState(false);
@@ -31,6 +31,7 @@ export function PreregisterForm() {
             email: email.trim(),
             willing_to_pay: willingToPay,
             source: 'landing_v2_pivot',
+            theme_preference: themePreference || null,
           }),
         });
 
@@ -49,7 +50,7 @@ export function PreregisterForm() {
         setState('idle');
       }
     },
-    [email, willingToPay, ageConfirmed]
+    [email, willingToPay, ageConfirmed, themePreference]
   );
 
   if (state === 'success') {

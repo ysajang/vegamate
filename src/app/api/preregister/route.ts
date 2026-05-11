@@ -22,6 +22,8 @@ async function handler(req: NextRequest) {
   const email = sanitizeString(body.email).toLowerCase();
   const willingToPay = body.willing_to_pay === true;
   const source = sanitizeString(body.source || '') || null;
+  const themeRaw = sanitizeString(body.theme_preference || '');
+  const themePreference = ['fantasy', 'modern'].includes(themeRaw) ? themeRaw : null;
 
   if (!email || !isValidEmail(email)) {
     throw new AppError('Please enter a valid email address');
@@ -34,6 +36,7 @@ async function handler(req: NextRequest) {
       email,
       willing_to_pay: willingToPay,
       source,
+      theme_preference: themePreference,
     },
     { onConflict: 'email' }
   );
