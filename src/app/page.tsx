@@ -23,23 +23,23 @@ export default function LandingPage() {
       </div>
 
       {/* Hero */}
-      <section className="flex w-full max-w-lg flex-col items-center gap-2 px-6 pb-2 pt-10">
-        <div className="relative flex h-12 w-12 items-center justify-center">
+      <section className="flex w-full max-w-2xl flex-col items-center gap-3 px-6 pb-4 pt-12 sm:gap-4 sm:pt-16">
+        <div className="relative flex h-14 w-14 items-center justify-center sm:h-16 sm:w-16">
           <div className="absolute inset-0 animate-pulse rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 opacity-20 blur-lg" />
-          <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-fuchsia-600 text-xl font-bold text-white shadow-lg shadow-violet-500/25">
+          <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-fuchsia-600 text-2xl font-bold text-white shadow-lg shadow-violet-500/25 sm:h-14 sm:w-14 sm:text-3xl">
             V
           </div>
         </div>
 
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+        <h1 className="text-3xl font-bold tracking-tight sm:text-5xl">
           <span className="bg-gradient-to-r from-violet-400 via-fuchsia-400 to-amber-400 bg-clip-text text-transparent">
             VegaMate
           </span>
         </h1>
-        <p className="text-center text-sm font-medium text-muted-foreground">
+        <p className="text-center text-base font-medium text-muted-foreground sm:text-lg">
           AI Companion Gacha — Chat, Bond, Collect
         </p>
-        <p className="max-w-xs text-center text-xs leading-relaxed text-muted-foreground/60">
+        <p className="max-w-md text-center text-sm leading-relaxed text-muted-foreground/60 sm:text-base">
           Chat with AI characters who remember you.
           Pull gacha for their exclusive photos —
           from casual selfies to stunning shots.
@@ -48,7 +48,7 @@ export default function LandingPage() {
       </section>
 
       {/* Theme A/B selector -> Pre-register */}
-      <section className="w-full px-6 pb-6 pt-3" id="signup">
+      <section className="w-full px-6 pb-8 pt-2 sm:pt-4" id="signup">
         <ThemeSelector />
       </section>
 

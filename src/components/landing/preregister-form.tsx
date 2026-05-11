@@ -68,7 +68,7 @@ export function PreregisterForm({ themePreference }: { themePreference?: string 
   }
 
   return (
-    <div className="w-full max-w-md">
+    <div className="w-full max-w-xl">
       <div className="flex flex-col gap-3 rounded-xl border border-border/50 bg-card/50 p-4 backdrop-blur-sm">
         <div className="flex flex-col gap-0.5">
           <h3 className="text-sm font-semibold">Get Early Access</h3>
