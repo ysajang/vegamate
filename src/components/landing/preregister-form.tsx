@@ -68,47 +68,47 @@ export function PreregisterForm() {
 
   return (
     <div className="w-full max-w-md">
-      <div className="flex flex-col gap-4 rounded-2xl border border-border/50 bg-card/50 p-6 backdrop-blur-sm">
-        <div className="flex flex-col gap-1">
-          <h3 className="text-lg font-semibold">Get Early Access</h3>
-          <p className="text-sm text-muted-foreground">
+      <div className="flex flex-col gap-3 rounded-xl border border-border/50 bg-card/50 p-4 backdrop-blur-sm">
+        <div className="flex flex-col gap-0.5">
+          <h3 className="text-sm font-semibold">Get Early Access</h3>
+          <p className="text-xs text-muted-foreground">
             Be the first to meet your companion
           </p>
         </div>
 
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2">
           <input
             type="email"
             placeholder="your@email.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             disabled={state === 'submitting'}
-            className="h-12 w-full rounded-lg border border-border bg-background px-4 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-violet-500 focus:ring-1 focus:ring-violet-500 disabled:opacity-50"
+            className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-violet-500 focus:ring-1 focus:ring-violet-500 disabled:opacity-50"
             required
           />
 
-          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 transition-colors hover:bg-amber-500/10">
+          <label className="flex cursor-pointer items-center gap-2.5 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 transition-colors hover:bg-amber-500/10">
             <input
               type="checkbox"
               checked={ageConfirmed}
               onChange={(e) => setAgeConfirmed(e.target.checked)}
               disabled={state === 'submitting'}
-              className="mt-0.5 h-4 w-4 rounded border-border accent-amber-500"
+              className="h-3.5 w-3.5 rounded border-border accent-amber-500"
             />
-            <span className="text-sm text-amber-200/90">
+            <span className="text-xs text-amber-200/90">
               I confirm I am 18 years or older
             </span>
           </label>
 
-          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border/50 p-3 transition-colors hover:bg-accent/50">
+          <label className="flex cursor-pointer items-center gap-2.5 rounded-md border border-border/50 px-3 py-2 transition-colors hover:bg-accent/50">
             <input
               type="checkbox"
               checked={willingToPay}
               onChange={(e) => setWillingToPay(e.target.checked)}
               disabled={state === 'submitting'}
-              className="mt-0.5 h-4 w-4 rounded border-border accent-violet-500"
+              className="h-3.5 w-3.5 rounded border-border accent-violet-500"
             />
-            <span className="text-sm text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               I&apos;d pay $7.99+/mo for unlimited chat &amp; bonus gacha pulls
             </span>
           </label>
@@ -116,11 +116,11 @@ export function PreregisterForm() {
           <button
             onClick={handleSubmit}
             disabled={state === 'submitting' || !email.trim() || !ageConfirmed}
-            className="h-12 w-full rounded-lg bg-violet-600 text-sm font-semibold text-white transition-all hover:bg-violet-500 disabled:opacity-50"
+            className="h-10 w-full rounded-lg bg-violet-600 text-sm font-semibold text-white transition-all hover:bg-violet-500 disabled:opacity-50"
           >
             {state === 'submitting' ? (
               <span className="flex items-center justify-center gap-2">
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
                 Joining...
               </span>
             ) : (
@@ -129,7 +129,7 @@ export function PreregisterForm() {
           </button>
 
           <p className="text-center text-[10px] text-muted-foreground/50">
-            This app contains suggestive content (bikini/lingerie). No nudity.
+            Contains suggestive content (bikini/lingerie). No nudity.
           </p>
         </div>
       </div>
