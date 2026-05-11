@@ -30,7 +30,7 @@ export default function LandingPage() {
         <div className="relative flex h-20 w-20 items-center justify-center">
           <div className="absolute inset-0 animate-pulse rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-500 opacity-20 blur-xl" />
           <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-fuchsia-600 text-3xl font-bold text-white shadow-lg shadow-violet-500/25">
-            P
+            V
           </div>
         </div>
 
