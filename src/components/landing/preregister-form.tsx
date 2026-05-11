@@ -52,7 +52,7 @@ export function PreregisterForm() {
         <div className="text-4xl">✨</div>
         <h3 className="text-lg font-semibold">You&apos;re on the list!</h3>
         <p className="text-sm text-muted-foreground">
-          We&apos;ll notify you when PRISM launches
+          We&apos;ll notify you when VegaMate launches
         </p>
       </div>
     );

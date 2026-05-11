@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: 'PRISM - AI Wallpaper Gacha',
-    template: '%s | PRISM',
+    default: 'VegaMate - AI Wallpaper Gacha',
+    template: '%s | VegaMate',
   },
   description: 'Collect stunning AI-generated wallpapers through daily gacha draws. Draw rare and legendary pieces for your collection.',
   keywords: ['wallpaper', 'AI art', 'gacha', 'collection', 'anime', 'illustration'],
@@ -24,17 +24,17 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'PRISM',
+    title: 'VegaMate',
   },
   openGraph: {
     type: 'website',
-    siteName: 'PRISM',
-    title: 'PRISM - AI Wallpaper Gacha',
+    siteName: 'VegaMate',
+    title: 'VegaMate - AI Wallpaper Gacha',
     description: 'Collect stunning AI-generated wallpapers through daily gacha draws.',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'PRISM - AI Wallpaper Gacha',
+    title: 'VegaMate - AI Wallpaper Gacha',
     description: 'Collect stunning AI-generated wallpapers through daily gacha draws.',
   },
   robots: {

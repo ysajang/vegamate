@@ -1,7 +1,7 @@
 export const APP_CONFIG = {
-  name: 'PRISM',
+  name: 'VegaMate',
   description: 'Collect stunning AI wallpapers through daily gacha draws',
-  url: process.env.NEXT_PUBLIC_APP_URL || 'https://prism.app',
+  url: process.env.NEXT_PUBLIC_APP_URL || 'https://vegamate.com',
 } as const;
 
 export const GACHA_CONFIG = {

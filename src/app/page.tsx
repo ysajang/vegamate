@@ -4,11 +4,11 @@ import { FeatureGrid } from '@/components/landing/feature-grid';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'PRISM - AI Wallpaper Gacha',
+  title: 'VegaMate - AI Wallpaper Gacha',
   description:
     'Collect stunning AI-generated wallpapers through daily gacha draws. Draw rare and legendary anime-style pieces for your collection.',
   openGraph: {
-    title: 'PRISM - AI Wallpaper Gacha',
+    title: 'VegaMate - AI Wallpaper Gacha',
     description: 'Collect stunning AI-generated wallpapers through daily gacha draws.',
     type: 'website',
   },
@@ -37,7 +37,7 @@ export default function LandingPage() {
         <div className="flex flex-col items-center gap-3 text-center">
           <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
             <span className="bg-gradient-to-r from-violet-400 via-fuchsia-400 to-amber-400 bg-clip-text text-transparent">
-              PRISM
+              VegaMate
             </span>
           </h1>
           <p className="text-lg text-muted-foreground">
@@ -78,7 +78,7 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="w-full border-t border-border/30 py-6 text-center text-xs text-muted-foreground/60">
-        © 2026 PRISM. All rights reserved.
+        © 2026 VegaMate. All rights reserved.
       </footer>
     </main>
   );
