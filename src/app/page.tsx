@@ -39,12 +39,11 @@ export default function LandingPage() {
         <p className="text-center text-base font-medium text-muted-foreground sm:text-lg">
           AI Companion Gacha — Chat, Bond, Collect
         </p>
-        <p className="max-w-md text-center text-sm leading-relaxed text-muted-foreground/60 sm:text-base">
-          Chat with AI characters who remember you.
-          Pull gacha for their exclusive photos —
-          from casual selfies to stunning shots.
-          Male &amp; female companions available.
-        </p>
+        <div className="flex max-w-lg flex-col items-center gap-1 text-center text-sm text-muted-foreground/60 sm:text-base">
+          <p>Chat with AI characters who remember you</p>
+          <p>Pull gacha for their exclusive photos — casual to stunning</p>
+          <p>Male &amp; female companions available</p>
+        </div>
       </section>
 
       {/* Theme A/B selector -> Pre-register */}
