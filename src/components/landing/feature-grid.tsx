@@ -1,23 +1,23 @@
 const FEATURES = [
   {
-    emoji: '🎲',
-    title: 'Daily Free Draw',
-    desc: 'One free gacha pull every day',
+    emoji: '💬',
+    title: 'Real Conversations',
+    desc: 'AI companions with personality, memory, and real chemistry',
   },
   {
-    emoji: '🎨',
-    title: 'AI-Generated Art',
-    desc: 'Unique anime-style wallpapers',
+    emoji: '🎰',
+    title: 'Gacha Pulls',
+    desc: 'Earn tickets through chat, pull for exclusive photos',
+  },
+  {
+    emoji: '👫',
+    title: 'Male & Female',
+    desc: 'Choose your type — boyfriends and girlfriends',
   },
   {
     emoji: '📱',
-    title: 'Phone-Ready',
-    desc: 'Perfect fit for your screen',
-  },
-  {
-    emoji: '🏆',
-    title: 'Rare Collectibles',
-    desc: 'Chase Legendary drops at 2%',
+    title: 'Phone Wallpapers',
+    desc: 'Every photo is sized perfectly for your screen',
   },
 ] as const;
 

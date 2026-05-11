@@ -15,11 +15,11 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: 'VegaMate - AI Wallpaper Gacha',
+    default: 'VegaMate - AI Companion Gacha',
     template: '%s | VegaMate',
   },
-  description: 'Collect stunning AI-generated wallpapers through daily gacha draws. Draw rare and legendary pieces for your collection.',
-  keywords: ['wallpaper', 'AI art', 'gacha', 'collection', 'anime', 'illustration'],
+  description: 'Chat with stunning AI companions. Build intimacy. Pull gacha for their exclusive wallpapers. Male & female characters.',
+  keywords: ['AI companion', 'AI boyfriend', 'AI girlfriend', 'gacha', 'wallpaper', 'collection'],
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
@@ -29,13 +29,13 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     siteName: 'VegaMate',
-    title: 'VegaMate - AI Wallpaper Gacha',
-    description: 'Collect stunning AI-generated wallpapers through daily gacha draws.',
+    title: 'VegaMate - AI Companion Gacha',
+    description: 'Chat with AI companions, collect their exclusive photos through gacha pulls.',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'VegaMate - AI Wallpaper Gacha',
-    description: 'Collect stunning AI-generated wallpapers through daily gacha draws.',
+    title: 'VegaMate - AI Companion Gacha',
+    description: 'Chat with AI companions, collect their exclusive photos through gacha pulls.',
   },
   robots: {
     index: true,
