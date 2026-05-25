@@ -24,10 +24,10 @@ export const metadata: Metadata = {
 };
 
 const SELFIES = [
-  { src: '/selfie-girl-1.png', alt: 'Miku sent you a selfie from her room', rotate: '-3deg', z: 30 },
-  { src: '/selfie-boy-2.png', alt: 'Leo sent you a selfie from the library', rotate: '2.5deg', z: 20 },
-  { src: '/selfie-girl-2.png', alt: 'Aria sent you a selfie from a cafe', rotate: '-1.5deg', z: 40 },
-  { src: '/selfie-boy-1.png', alt: 'Ren sent you a selfie from the rooftop', rotate: '3deg', z: 10 },
+  { src: '/selfie-girl-1.webp', alt: 'Miku sent you a selfie from her room', rotate: '-3deg', z: 30 },
+  { src: '/selfie-boy-2.webp', alt: 'Leo sent you a selfie from the library', rotate: '2.5deg', z: 20 },
+  { src: '/selfie-girl-2.webp', alt: 'Aria sent you a selfie from a cafe', rotate: '-1.5deg', z: 40 },
+  { src: '/selfie-boy-1.webp', alt: 'Ren sent you a selfie from the rooftop', rotate: '3deg', z: 10 },
 ];
 
 export default function LandingPage() {
