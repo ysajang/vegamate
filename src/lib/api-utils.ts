@@ -29,12 +29,12 @@ export function apiError(
 }
 
 /** Wrap API route handler with error catching */
-export function withErrorHandler(
-  handler: (req: NextRequest) => Promise<NextResponse>
+export function withErrorHandler<TArgs extends unknown[]>(
+  handler: (req: NextRequest, ...args: TArgs) => Promise<NextResponse>
 ) {
-  return async (req: NextRequest): Promise<NextResponse> => {
+  return async (req: NextRequest, ...args: TArgs): Promise<NextResponse> => {
     try {
-      return await handler(req);
+      return await handler(req, ...args);
     } catch (error) {
       if (error instanceof AppError) {
         return apiError(error.message, error.statusCode);
