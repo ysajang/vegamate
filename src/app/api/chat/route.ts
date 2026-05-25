@@ -156,6 +156,12 @@ async function handler(req: NextRequest) {
     shouldIncludeSelfie: willSendSelfie,
   });
 
+  // Crisis override: AI service already suppressed selfie in prompt,
+  // but also skip selfie delivery on our side
+  if (aiResult.crisisSeverity !== 'none') {
+    willSendSelfie = false;
+  }
+
   // 11. If selfie triggered, pick one and consume credits
   let selfieData: DbSelfie | null = null;
 
