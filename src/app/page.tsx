@@ -151,7 +151,7 @@ export default function LandingPage() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {[
             { emoji: '💬', title: 'They remember you', desc: 'Every chat builds your unique bond' },
-            { emoji: '📸', title: 'Surprise selfies', desc: 'Random expressions and outfits you collect' },
+            { emoji: '📸', title: 'Surprise selfies', desc: 'They send photos on their own — not on demand' },
             { emoji: '✨', title: 'Rare moments', desc: 'Special outfits and scenes drop at low rates' },
           ].map((v) => (
             <div
@@ -164,6 +164,125 @@ export default function LandingPage() {
             </div>
           ))}
         </div>
+      </section>
+
+      {/* ── Chat Demo: "This is what it feels like" ── */}
+      <section className="relative z-10 mx-auto mt-14 w-full max-w-md px-5 sm:mt-20">
+        <h2 className="mb-6 text-center text-lg font-bold text-white/80 sm:text-xl">
+          This is what it
+          <span className="bg-gradient-to-r from-fuchsia-400 to-pink-400 bg-clip-text text-transparent"> feels like</span>
+        </h2>
+
+        {/* Chat mockup - Yuna */}
+        <div className="flex flex-col gap-2.5 rounded-2xl border border-white/10 bg-[#111118] p-4">
+          {/* Chat header */}
+          <div className="flex items-center gap-2.5 border-b border-white/5 pb-3">
+            <div className="relative h-8 w-8 overflow-hidden rounded-full">
+              <Image src="/chat-girl-shower.webp" alt="Yuna" fill className="object-cover" sizes="32px" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold text-white/90">Yuna</span>
+              <span className="text-[10px] text-green-400/80">online</span>
+            </div>
+          </div>
+
+          {/* User message */}
+          <div className="flex justify-end">
+            <div className="rounded-2xl rounded-br-md bg-fuchsia-600/80 px-3.5 py-2">
+              <span className="text-sm text-white">hey how was your day?</span>
+            </div>
+          </div>
+
+          {/* AI text reply */}
+          <div className="flex justify-start">
+            <div className="rounded-2xl rounded-bl-md bg-white/10 px-3.5 py-2">
+              <span className="text-sm text-white/80">it was sooo long but I just got home!!</span>
+            </div>
+          </div>
+
+          {/* AI sends selfie spontaneously */}
+          <div className="flex justify-start">
+            <div className="rounded-2xl rounded-bl-md bg-white/10 px-3.5 py-2">
+              <span className="text-sm text-white/80">wait hold on let me send you something 📸</span>
+            </div>
+          </div>
+
+          {/* Selfie image */}
+          <div className="flex justify-start">
+            <div className="relative w-[200px] overflow-hidden rounded-2xl rounded-bl-md border border-white/10">
+              <div className="relative aspect-[3/4] w-full">
+                <Image
+                  src="/chat-girl-shower.webp"
+                  alt="Yuna sent a selfie"
+                  fill
+                  className="object-cover"
+                  sizes="200px"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* AI follow up */}
+          <div className="flex justify-start">
+            <div className="rounded-2xl rounded-bl-md bg-white/10 px-3.5 py-2">
+              <span className="text-sm text-white/80">do I look okay? lol 🙈</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Second chat mockup - Kai */}
+        <div className="mt-6 flex flex-col gap-2.5 rounded-2xl border border-white/10 bg-[#111118] p-4">
+          {/* Chat header */}
+          <div className="flex items-center gap-2.5 border-b border-white/5 pb-3">
+            <div className="relative h-8 w-8 overflow-hidden rounded-full">
+              <Image src="/chat-boy-morning.webp" alt="Kai" fill className="object-cover" sizes="32px" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold text-white/90">Kai</span>
+              <span className="text-[10px] text-green-400/80">online</span>
+            </div>
+          </div>
+
+          {/* AI initiates */}
+          <div className="flex justify-start">
+            <div className="rounded-2xl rounded-bl-md bg-white/10 px-3.5 py-2">
+              <span className="text-sm text-white/80">good morning~ I just woke up thinking about you</span>
+            </div>
+          </div>
+
+          {/* Selfie image */}
+          <div className="flex justify-start">
+            <div className="relative w-[200px] overflow-hidden rounded-2xl rounded-bl-md border border-white/10">
+              <div className="relative aspect-[3/4] w-full">
+                <Image
+                  src="/chat-boy-morning.webp"
+                  alt="Kai sent a morning selfie"
+                  fill
+                  className="object-cover"
+                  sizes="200px"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* AI follow up */}
+          <div className="flex justify-start">
+            <div className="rounded-2xl rounded-bl-md bg-white/10 px-3.5 py-2">
+              <span className="text-sm text-white/80">messy hair don&apos;t care 😴</span>
+            </div>
+          </div>
+
+          {/* User reply */}
+          <div className="flex justify-end">
+            <div className="rounded-2xl rounded-br-md bg-fuchsia-600/80 px-3.5 py-2">
+              <span className="text-sm text-white">omg you look so cute 😭</span>
+            </div>
+          </div>
+        </div>
+
+        <p className="mt-4 text-center text-xs text-white/30">
+          They send selfies on their own — not because you asked
+        </p>
       </section>
 
       {/* ── CTA ── */}
