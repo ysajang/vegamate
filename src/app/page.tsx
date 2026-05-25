@@ -280,10 +280,6 @@ export default function LandingPage() {
           </div>
         </div>
 
-        <p className="mt-4 text-center text-xs text-white/30">
-          They send selfies on their own — not because you asked
-        </p>
-
         {/* Third chat mockup - Luna (cafe) */}
         <div className="mt-6 flex flex-col gap-2.5 rounded-2xl border border-white/10 bg-[#111118] p-4">
           <div className="flex items-center gap-2.5 border-b border-white/5 pb-3">
@@ -384,6 +380,10 @@ export default function LandingPage() {
             </div>
           </div>
         </div>
+
+        <p className="mt-6 text-center text-sm font-medium text-white/40">
+          They send selfies on their own — not because you asked
+        </p>
       </section>
 
       {/* ── CTA ── */}
