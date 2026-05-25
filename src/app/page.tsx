@@ -283,6 +283,107 @@ export default function LandingPage() {
         <p className="mt-4 text-center text-xs text-white/30">
           They send selfies on their own — not because you asked
         </p>
+
+        {/* Third chat mockup - Luna (cafe) */}
+        <div className="mt-6 flex flex-col gap-2.5 rounded-2xl border border-white/10 bg-[#111118] p-4">
+          <div className="flex items-center gap-2.5 border-b border-white/5 pb-3">
+            <div className="relative h-8 w-8 overflow-hidden rounded-full">
+              <Image src="/chat-girl-cafe.webp" alt="Luna" fill className="object-cover" sizes="32px" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold text-white/90">Luna</span>
+              <span className="text-[10px] text-green-400/80">online</span>
+            </div>
+          </div>
+
+          {/* User message */}
+          <div className="flex justify-end">
+            <div className="rounded-2xl rounded-br-md bg-fuchsia-600/80 px-3.5 py-2">
+              <span className="text-sm text-white">what are you up to?</span>
+            </div>
+          </div>
+
+          {/* AI reply */}
+          <div className="flex justify-start">
+            <div className="rounded-2xl rounded-bl-md bg-white/10 px-3.5 py-2">
+              <span className="text-sm text-white/80">found this cute cafe near the station!!</span>
+            </div>
+          </div>
+
+          <div className="flex justify-start">
+            <div className="rounded-2xl rounded-bl-md bg-white/10 px-3.5 py-2">
+              <span className="text-sm text-white/80">look look look 📸</span>
+            </div>
+          </div>
+
+          {/* Selfie */}
+          <div className="flex justify-start">
+            <div className="relative w-[200px] overflow-hidden rounded-2xl rounded-bl-md border border-white/10">
+              <div className="relative aspect-[3/4] w-full">
+                <Image src="/chat-girl-cafe.webp" alt="Luna sent a cafe selfie" fill className="object-cover" sizes="200px" />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-start">
+            <div className="rounded-2xl rounded-bl-md bg-white/10 px-3.5 py-2">
+              <span className="text-sm text-white/80">rainy days + coffee = perfect combo ☕💜</span>
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <div className="rounded-2xl rounded-br-md bg-fuchsia-600/80 px-3.5 py-2">
+              <span className="text-sm text-white">that looks so cozy!! save me a seat</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Fourth chat mockup - Sora (gym) */}
+        <div className="mt-6 flex flex-col gap-2.5 rounded-2xl border border-white/10 bg-[#111118] p-4">
+          <div className="flex items-center gap-2.5 border-b border-white/5 pb-3">
+            <div className="relative h-8 w-8 overflow-hidden rounded-full">
+              <Image src="/chat-boy-gym.webp" alt="Sora" fill className="object-cover" sizes="32px" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold text-white/90">Sora</span>
+              <span className="text-[10px] text-green-400/80">online</span>
+            </div>
+          </div>
+
+          {/* AI initiates */}
+          <div className="flex justify-start">
+            <div className="rounded-2xl rounded-bl-md bg-white/10 px-3.5 py-2">
+              <span className="text-sm text-white/80">just hit a new PR at the gym 💪</span>
+            </div>
+          </div>
+
+          <div className="flex justify-start">
+            <div className="rounded-2xl rounded-bl-md bg-white/10 px-3.5 py-2">
+              <span className="text-sm text-white/80">had to flex for you real quick</span>
+            </div>
+          </div>
+
+          {/* Selfie */}
+          <div className="flex justify-start">
+            <div className="relative w-[200px] overflow-hidden rounded-2xl rounded-bl-md border border-white/10">
+              <div className="relative aspect-[3/4] w-full">
+                <Image src="/chat-boy-gym.webp" alt="Sora sent a gym selfie" fill className="object-cover" sizes="200px" />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-start">
+            <div className="rounded-2xl rounded-bl-md bg-white/10 px-3.5 py-2">
+              <span className="text-sm text-white/80">am I getting bigger or is it just the lighting? 😏</span>
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <div className="rounded-2xl rounded-br-md bg-fuchsia-600/80 px-3.5 py-2">
+              <span className="text-sm text-white">OKAY wow 🥵</span>
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* ── CTA ── */}
