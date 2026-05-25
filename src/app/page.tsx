@@ -5,20 +5,20 @@ import type { Metadata } from 'next';
 export const metadata: Metadata = {
   title: 'VegaMate — Your AI Companion Sends You Selfies',
   description:
-    'Chat with AI companions who remember you. They send you selfies — you never know what you will get. Collect rare expressions and outfits.',
+    'Chat with AI companions who send you selfies on their own. Not on demand — they surprise you. Collect rare expressions and outfits.',
   openGraph: {
     title: 'VegaMate — Your AI Companion Sends You Selfies',
     description:
-      'Chat with AI companions who remember you. They send you selfies — you never know what you will get.',
+      'They send you selfies on their own — not because you asked. Chat and collect rare moments.',
     type: 'website',
     url: 'https://vegamate.com',
-    images: [{ url: 'https://vegamate.com/og-image.jpg', width: 1200, height: 630 }],
+    images: [{ url: 'https://vegamate.com/og-image.jpg', width: 1200, height: 630, alt: 'VegaMate - AI companions who send you selfies' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'VegaMate — Your AI Companion Sends You Selfies',
+    title: 'Your AI companion sends you selfies 📸',
     description:
-      'Chat with AI companions who remember you. They send you selfies — you never know what you will get.',
+      'They send photos on their own — not because you asked. Chat and collect rare moments.',
     images: ['https://vegamate.com/og-image.jpg'],
   },
 };

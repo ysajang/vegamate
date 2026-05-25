@@ -19,8 +19,8 @@ export const metadata: Metadata = {
     default: 'VegaMate - Companion Gacha',
     template: '%s | VegaMate',
   },
-  description: 'Chat with anime characters who remember you. Pull gacha for their exclusive photos. Male & female companions available.',
-  keywords: ['AI companion', 'AI boyfriend', 'AI girlfriend', 'gacha', 'wallpaper', 'collection'],
+  description: 'Chat with AI companions who send you selfies on their own. Not on demand — they surprise you. Collect rare expressions and outfits.',
+  keywords: ['AI companion', 'AI boyfriend', 'AI girlfriend', 'gacha', 'selfie', 'anime companion'],
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
@@ -30,22 +30,22 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     siteName: 'VegaMate',
-    title: 'VegaMate - Companion Gacha',
-    description: 'Chat with anime characters who remember you. Pull gacha for their exclusive photos.',
+    title: 'VegaMate — Your AI Companion Sends You Selfies',
+    description: 'They send you selfies on their own — not because you asked. Chat and collect rare moments.',
     url: 'https://vegamate.com',
     images: [
       {
         url: 'https://vegamate.com/og-image.jpg',
         width: 1200,
         height: 630,
-        alt: 'VegaMate - Companion Gacha with Fantasy and Modern characters',
+        alt: 'VegaMate - AI companions who send you selfies',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'VegaMate - Companion Gacha',
-    description: 'Chat with anime characters who remember you. Pull gacha for their exclusive photos.',
+    title: 'Your AI companion sends you selfies 📸',
+    description: 'They send photos on their own — not because you asked. Chat and collect rare moments.',
     images: ['https://vegamate.com/og-image.jpg'],
   },
   robots: {
