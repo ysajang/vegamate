@@ -1,49 +1,64 @@
 'use client';
 
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Coins } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
+import { CharacterAvatar } from '@/components/common';
 
 interface ChatHeaderProps {
   characterName: string;
   characterAvatar: string;
-  creditsRemaining: number | null;
+  /** Accent color CSS value — defaults to Miku rose */
+  accentColor?: string;
+  creditsRemaining?: number | null;
 }
 
-export function ChatHeader({ characterName, characterAvatar, creditsRemaining }: ChatHeaderProps) {
+export function ChatHeader({
+  characterName,
+  characterAvatar,
+  accentColor = 'var(--vm-rose)',
+}: ChatHeaderProps) {
   const router = useRouter();
 
   return (
-    <header className="flex items-center gap-3 border-b border-border/50 bg-background/80 px-3 py-2.5 backdrop-blur-sm">
+    <header
+      className="vm-glass-heavy vm-tap-none sticky top-0 z-10 flex items-center gap-3 px-3.5 py-2.5"
+      style={{ borderBottom: '0.5px solid var(--vm-glass-border)' }}
+    >
+      {/* Back button */}
       <button
         onClick={() => router.push('/select')}
-        className="flex size-8 items-center justify-center rounded-full transition-colors hover:bg-muted"
+        className="flex size-9 items-center justify-center rounded-xl transition-colors"
+        style={{ color: 'var(--vm-text-secondary)' }}
         aria-label="Back to character select"
       >
-        <ArrowLeft className="size-5" />
+        <ArrowLeft className="size-[18px]" />
       </button>
 
-      <Image
+      {/* Avatar + online */}
+      <CharacterAvatar
         src={characterAvatar}
-        alt={characterName}
-        width={36}
-        height={36}
-        className="size-9 rounded-full object-cover"
+        name={characterName}
+        size={40}
+        accentColor={accentColor}
+        showOnline
+        glow
       />
 
+      {/* Name + status */}
       <div className="flex-1">
-        <p className="text-sm font-semibold">{characterName}</p>
-        <p className="text-[11px] text-green-400">online</p>
+        <p
+          className="text-[16px] font-semibold leading-tight"
+          style={{ color: 'var(--vm-text-primary)' }}
+        >
+          {characterName}
+        </p>
+        <p
+          className="text-xs font-medium"
+          style={{ color: 'var(--vm-online)' }}
+        >
+          online now
+        </p>
       </div>
-
-      {creditsRemaining !== null && (
-        <div className="flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-1">
-          <Coins className="size-3.5 text-amber-400" />
-          <span className="text-xs font-semibold tabular-nums text-amber-400">
-            {creditsRemaining}
-          </span>
-        </div>
-      )}
     </header>
   );
 }
