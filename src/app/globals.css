@@ -4,12 +4,20 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ═══════════════════════════════════════════════════════════
+   VegaMate Design Tokens
+   Dark-first premium companion app
+   ═══════════════════════════════════════════════════════════ */
+
 @theme inline {
+  /* ── Semantic color mapping ── */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
+
+  /* ── shadcn compatibility ── */
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -46,8 +54,26 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* ── VegaMate custom colors ── */
+  --color-vm-base: var(--vm-base);
+  --color-vm-elevated: var(--vm-elevated);
+  --color-vm-card: var(--vm-card);
+  --color-vm-glass: var(--vm-glass);
+  --color-vm-glass-border: var(--vm-glass-border);
+  --color-vm-purple: var(--vm-purple);
+  --color-vm-purple-soft: var(--vm-purple-soft);
+  --color-vm-purple-deep: var(--vm-purple-deep);
+  --color-vm-rose: var(--vm-rose);
+  --color-vm-rose-soft: var(--vm-rose-soft);
+  --color-vm-cool: var(--vm-cool);
+  --color-vm-online: var(--vm-online);
+  --color-vm-text-primary: var(--vm-text-primary);
+  --color-vm-text-secondary: var(--vm-text-secondary);
+  --color-vm-text-tertiary: var(--vm-text-tertiary);
 }
 
+/* ── Light mode (unused but required for shadcn) ── */
 :root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -83,39 +109,72 @@
   --sidebar-ring: oklch(0.708 0 0);
 }
 
+/* ── Dark mode — VegaMate branded ── */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  /* shadcn overrides */
+  --background: #0A0A12;
+  --foreground: #F1F0F7;
+  --card: #1A1A2E;
+  --card-foreground: #F1F0F7;
+  --popover: #12121E;
+  --popover-foreground: #F1F0F7;
+  --primary: #7C3AED;
+  --primary-foreground: #FFFFFF;
+  --secondary: #1A1A2E;
+  --secondary-foreground: #F1F0F7;
+  --muted: #1A1A2E;
+  --muted-foreground: #6B6585;
+  --accent: #8B5CF6;
+  --accent-foreground: #FFFFFF;
+  --destructive: #F43F5E;
+  --border: rgba(139, 92, 246, 0.08);
+  --input: rgba(139, 92, 246, 0.12);
+  --ring: #8B5CF6;
+  --chart-1: #8B5CF6;
+  --chart-2: #A78BFA;
+  --chart-3: #C4B1FD;
+  --chart-4: #FB7185;
+  --chart-5: #F43F5E;
+  --sidebar: #0A0A12;
+  --sidebar-foreground: #F1F0F7;
+  --sidebar-primary: #7C3AED;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #1A1A2E;
+  --sidebar-accent-foreground: #F1F0F7;
+  --sidebar-border: rgba(139, 92, 246, 0.08);
+  --sidebar-ring: #8B5CF6;
+
+  /* ── VegaMate tokens ── */
+  --vm-base: #0A0A12;
+  --vm-elevated: #12121E;
+  --vm-card: #1A1A2E;
+  --vm-glass: rgba(26, 26, 46, 0.65);
+  --vm-glass-border: rgba(139, 92, 246, 0.12);
+
+  /* Purple ramp */
+  --vm-purple: #7C3AED;
+  --vm-purple-soft: #A78BFA;
+  --vm-purple-deep: #6D28D9;
+
+  /* Character accent — Miku */
+  --vm-rose: #F43F5E;
+  --vm-rose-soft: #FB7185;
+
+  /* Character accent — Ren */
+  --vm-cool: #7A8B9E;
+
+  /* Status */
+  --vm-online: #34D399;
+
+  /* Text hierarchy */
+  --vm-text-primary: #F1F0F7;
+  --vm-text-secondary: #A09CB5;
+  --vm-text-tertiary: #6B6585;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   VegaMate Utility Classes
+   ═══════════════════════════════════════════════════════════ */
 
 @layer base {
   * {
@@ -127,4 +186,137 @@
   html {
     @apply font-sans;
   }
+}
+
+@layer utilities {
+  /* Glassmorphism card */
+  .vm-glass {
+    background: var(--vm-glass);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 0.5px solid var(--vm-glass-border);
+  }
+
+  /* Glassmorphism — heavier blur for nav/header */
+  .vm-glass-heavy {
+    background: rgba(10, 10, 18, 0.92);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  /* Hide scrollbar */
+  .vm-scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .vm-scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Message bubble — AI (left) */
+  .vm-bubble-ai {
+    background: var(--vm-glass);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 0.5px solid var(--vm-glass-border);
+    border-radius: 20px 20px 20px 6px;
+  }
+
+  /* Message bubble — User (right) */
+  .vm-bubble-user {
+    background: var(--vm-purple-deep);
+    border-radius: 20px 20px 6px 20px;
+  }
+
+  /* Safe area padding for PWA bottom */
+  .vm-safe-bottom {
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 20px);
+  }
+
+  /* Tap highlight removal for mobile */
+  .vm-tap-none {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   VegaMate Animations
+   ═══════════════════════════════════════════════════════════ */
+
+@layer utilities {
+  .vm-animate-fade-in-up {
+    animation: vm-fadeInUp 0.35s ease-out both;
+  }
+
+  .vm-animate-fade-in {
+    animation: vm-fadeIn 0.3s ease-out both;
+  }
+
+  .vm-animate-scale-in {
+    animation: vm-scaleIn 0.3s ease-out both;
+  }
+
+  .vm-animate-shimmer {
+    background: linear-gradient(
+      90deg,
+      transparent 30%,
+      rgba(255, 255, 255, 0.03) 50%,
+      transparent 70%
+    );
+    background-size: 200% 100%;
+    animation: vm-shimmer 3s linear infinite;
+  }
+}
+
+@keyframes vm-fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes vm-fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes vm-scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes vm-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes vm-pulse-dot {
+  0%, 80%, 100% {
+    opacity: 0.3;
+    transform: scale(0.85);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes vm-glow-gold {
+  0%, 100% { box-shadow: 0 0 8px rgba(251, 191, 36, 0.3); }
+  50% { box-shadow: 0 0 20px rgba(251, 191, 36, 0.6); }
+}
+
+@keyframes vm-glow-secret {
+  0%, 100% { box-shadow: 0 0 8px rgba(232, 121, 249, 0.3); }
+  50% { box-shadow: 0 0 20px rgba(232, 121, 249, 0.6); }
 }
