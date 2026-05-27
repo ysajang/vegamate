@@ -175,7 +175,7 @@ function StepCharacter({
               src={c.avatar_url}
               alt={c.name}
               fill
-              className="object-cover"
+              className="object-cover object-top"
               priority
             />
           ) : (

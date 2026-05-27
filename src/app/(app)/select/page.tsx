@@ -163,7 +163,7 @@ export default function SelectPage() {
             src={char.avatar_url}
             alt={char.name}
             fill
-            className="object-cover"
+            className="object-cover object-top"
             priority
           />
         ) : (
