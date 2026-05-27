@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createServerSupabase } from '@/lib/supabase/server';
+import { AppInitializer } from '@/components/common';
 
 export default async function AppLayout({
   children,
@@ -22,6 +23,7 @@ export default async function AppLayout({
         boxShadow: '0 0 80px rgba(59, 7, 100, 0.15)',
       }}
     >
+      <AppInitializer />
       {children}
     </div>
   );
