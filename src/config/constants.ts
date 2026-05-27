@@ -65,3 +65,10 @@ export const LLM_CONFIG = {
   MAX_TOKENS: 300,           // max response length
   TEMPERATURE: 0.85,         // slightly creative
 } as const;
+
+// ── Memory system config ────────────────────────────────────
+export const MEMORY_CONFIG = {
+  EXTRACTION_INTERVAL: 5,     // extract memories every N user messages
+  MAX_MEMORIES_INJECT: 30,    // max memories in system prompt
+  MIN_CONFIDENCE: 0.5,        // minimum confidence to save
+} as const;

@@ -21,6 +21,8 @@ interface GenerateResponseParams {
   history: DbMessage[];
   userMessage: string;
   shouldIncludeSelfie: boolean;
+  /** Formatted memory context to inject into system prompt */
+  memoryContext?: string;
 }
 
 interface GenerateResponseResult {
@@ -34,7 +36,7 @@ interface GenerateResponseResult {
 export async function generateAIResponse(
   params: GenerateResponseParams
 ): Promise<GenerateResponseResult> {
-  const { character, history, userMessage, shouldIncludeSelfie } = params;
+  const { character, history, userMessage, shouldIncludeSelfie, memoryContext } = params;
   const startTime = Date.now();
 
   const openai = getOpenAI();
@@ -44,6 +46,11 @@ export async function generateAIResponse(
 
   // Build system prompt with safety layer always present
   let systemPrompt = character.persona_prompt + '\n' + SAFETY_SYSTEM_PROMPT;
+
+  // Inject memory context (before crisis/selfie layers so those take priority)
+  if (memoryContext) {
+    systemPrompt += '\n\n' + memoryContext;
+  }
 
   // If crisis detected, override selfie behavior (no selfie during crisis)
   const actualSendSelfie = crisisResult.isCrisis ? false : shouldIncludeSelfie;

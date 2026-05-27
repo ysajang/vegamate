@@ -15,6 +15,7 @@ export type MessageRole = 'user' | 'assistant' | 'system';
 export type MessageContentType = 'text' | 'selfie' | 'text_with_selfie';
 export type CreditTxType = 'purchase' | 'consume_chat' | 'consume_selfie' | 'bonus' | 'refund';
 export type CreditTxStatus = 'pending' | 'completed' | 'failed' | 'refunded';
+export type MemoryType = 'fact' | 'preference' | 'event' | 'emotion';
 
 // ── Database row types ──────────────────────────────────────
 
@@ -148,6 +149,38 @@ export interface DbProactiveTemplate {
 }
 
 // ── API response types ──────────────────────────────────────
+
+export interface DbUserMemory {
+  id: string;
+  user_id: string;
+  character_id: string;
+  memory_key: string;
+  memory_value: string;
+  memory_type: MemoryType;
+  confidence: number;
+  source_message_id: string | null;
+  extraction_batch_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Shape returned by get_user_memories RPC */
+export interface MemoryRow {
+  memory_key: string;
+  memory_value: string;
+  memory_type: MemoryType;
+  confidence: number;
+  updated_at: string;
+}
+
+/** Shape returned by LLM memory extraction */
+export interface ExtractedMemory {
+  key: string;
+  value: string;
+  type: MemoryType;
+  confidence: number;
+}
 
 export interface ApiResponse<T = unknown> {
   success: boolean;

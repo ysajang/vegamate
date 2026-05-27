@@ -6,6 +6,16 @@ import { sanitizeString, isValidUUID } from '@/lib/validators';
 import { CREDIT_CONFIG } from '@/config/constants';
 import { evaluateSelfieTrigger } from '@/lib/chat/selfie-trigger';
 import { generateAIResponse } from '@/lib/chat/ai-service';
+import {
+  fetchUserMemories,
+  formatMemoriesForPrompt,
+  formatMemoriesForExtraction,
+  saveExtractedMemories,
+  incrementTurnCounter,
+  resetTurnCounter,
+} from '@/lib/chat/memory-store';
+import { extractMemories } from '@/lib/chat/memory-extraction';
+import { MEMORY_CONFIG } from '@/config/constants';
 import type { DbMessage, DbCharacter, DbSelfie } from '@/types';
 
 async function handler(req: NextRequest) {
@@ -120,6 +130,17 @@ async function handler(req: NextRequest) {
 
   const history = (historyRows || []) as DbMessage[];
 
+  // 8.5. Fetch user memories and build prompt context (non-blocking if fails)
+  let memoryContext = '';
+  let existingMemories: import('@/types').MemoryRow[] = [];
+  try {
+    existingMemories = await fetchUserMemories(serviceClient, user.id, character.id);
+    memoryContext = formatMemoriesForPrompt(existingMemories);
+  } catch (err) {
+    console.warn('[Chat] Memory fetch failed (continuing without):', err);
+    existingMemories = [];
+  }
+
   // 9. Evaluate selfie trigger
   const selfieMessages = history.filter((m) => m.selfie_id !== null);
   const lastSelfieIndex = selfieMessages.length > 0
@@ -154,6 +175,7 @@ async function handler(req: NextRequest) {
     history,
     userMessage: content,
     shouldIncludeSelfie: willSendSelfie,
+    memoryContext,
   });
 
   // Crisis override: AI service already suppressed selfie in prompt,
@@ -288,7 +310,40 @@ async function handler(req: NextRequest) {
     .update({ total_messages_sent: (conversation.message_count || 0) + 1 })
     .eq('id', user.id);
 
-  // 13. Return response
+  // 13.5. Memory extraction (every N turns, fire-and-forget)
+  // This runs asynchronously - does not block response
+  (async () => {
+    try {
+      const turnCount = await incrementTurnCounter(serviceClient, conversationId);
+
+      if (turnCount + 1 >= MEMORY_CONFIG.EXTRACTION_INTERVAL) {
+        // Time to extract! Get recent messages since last extraction
+        const recentForExtraction = history.slice(-MEMORY_CONFIG.EXTRACTION_INTERVAL * 2);
+        const existingContext = formatMemoriesForExtraction(existingMemories || []);
+
+        const extractionResult = await extractMemories(recentForExtraction, existingContext);
+
+        if (extractionResult.memories.length > 0) {
+          await saveExtractedMemories(
+            serviceClient,
+            user.id,
+            character.id,
+            extractionResult.memories,
+            userMsg.id
+          );
+          console.log(
+            `[Chat] Extracted ${extractionResult.memories.length} memories (${extractionResult.tokensUsed} tokens, ${extractionResult.durationMs}ms)`
+          );
+        }
+
+        await resetTurnCounter(serviceClient, conversationId);
+      }
+    } catch (err) {
+      console.warn('[Chat] Memory extraction failed (non-critical):', err);
+    }
+  })();
+
+  // 14. Return response
   return apiSuccess({
     message: savedAiMsg as DbMessage,
     selfie: selfieData,
