@@ -72,3 +72,33 @@ export const MEMORY_CONFIG = {
   MAX_MEMORIES_INJECT: 30,    // max memories in system prompt
   MIN_CONFIDENCE: 0.5,        // minimum confidence to save
 } as const;
+
+// ── Proactive message engine config ─────────────────────────
+export const PROACTIVE_CONFIG = {
+  /** Min hours since last message before eligible */
+  MIN_INACTIVE_HOURS: 2,
+  /** Max hours -> after this always eligible */
+  MAX_INACTIVE_HOURS: 8,
+  /** Max proactive messages per user per day */
+  MAX_DAILY_SENDS: 3,
+  /** Max consecutive sends without user response */
+  MAX_CONSECUTIVE_SENDS: 2,
+  /** Earliest hour to send (user local time) */
+  QUIET_HOURS_START: 23,  // 11 PM
+  /** Latest hour to wake up (user local time) */
+  QUIET_HOURS_END: 8,     // 8 AM
+  /** Max users to process per cron invocation (Vercel timeout safety) */
+  BATCH_SIZE: 50,
+  /** Chance a proactive message includes a selfie (0.3 ~ 0.5) */
+  SELFIE_CHANCE_MIN: 0.30,
+  SELFIE_CHANCE_MAX: 0.50,
+} as const;
+
+/** Proactive selfie rarity distribution (different from chat selfie rates) */
+export const PROACTIVE_RARITY_RATES: Record<SelfieRarity, number> = {
+  common: 0.60,
+  uncommon: 0.25,
+  rare: 0.10,
+  epic: 0.04,
+  legendary: 0.01,
+};

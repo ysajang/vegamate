@@ -114,6 +114,7 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
         selfie_id: null,
         selfie_rarity: null,
         credits_consumed: 1,
+        is_proactive: false,
         metadata: null,
         created_at: new Date().toISOString(),
       };

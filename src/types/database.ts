@@ -93,6 +93,7 @@ export interface DbMessage {
   selfie_id: string | null;
   selfie_rarity: SelfieRarity | null;
   credits_consumed: number;
+  is_proactive: boolean;
   metadata: MessageMetadata | null;
   created_at: string;
   /** Joined data */
@@ -147,6 +148,18 @@ export interface DbProactiveTemplate {
   selfie_id: string | null;
   is_active: boolean;
   created_at: string;
+}
+
+export interface DbProactiveMessageLog {
+  id: string;
+  user_id: string;
+  character_id: string;
+  message_id: string | null;
+  category: string;
+  has_selfie: boolean;
+  selfie_rarity: string | null;
+  tokens_used: number;
+  sent_at: string;
 }
 
 // ── API response types ──────────────────────────────────────
