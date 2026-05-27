@@ -392,8 +392,25 @@ export default function LandingPage() {
       </section>
 
       {/* Footer */}
-      <footer className="relative z-10 mt-auto w-full border-t border-white/5 py-4 text-center text-xs text-white/20">
-        © 2026 VegaMate. All rights reserved.
+      <footer className="relative z-10 mt-auto w-full border-t border-white/5 px-5 py-5">
+        <div className="mx-auto flex max-w-xl flex-col items-center gap-2">
+          <div className="flex items-center gap-4 text-xs">
+            <a href="/privacy" className="text-white/30 transition-colors hover:text-white/60">
+              Privacy Policy
+            </a>
+            <span className="text-white/10">|</span>
+            <a href="/terms" className="text-white/30 transition-colors hover:text-white/60">
+              Terms of Service
+            </a>
+            <span className="text-white/10">|</span>
+            <a href="/disclaimer" className="text-white/30 transition-colors hover:text-white/60">
+              Disclaimer
+            </a>
+          </div>
+          <p className="text-xs text-white/20">
+            © 2026 VegaMate. All rights reserved.
+          </p>
+        </div>
       </footer>
     </main>
   );
