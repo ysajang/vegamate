@@ -109,6 +109,10 @@ interface MessageBubbleProps {
   characterName?: string;
   /** Accent color for character avatar fallback */
   accentColor?: string;
+  /** Gift slug if this message contains a gift request */
+  giftSlug?: string | null;
+  /** Character ID for gift purchase */
+  characterId?: string;
 }
 
 export function MessageBubble({
@@ -116,6 +120,8 @@ export function MessageBubble({
   characterAvatar,
   characterName,
   accentColor = 'var(--vm-rose)',
+  giftSlug,
+  characterId,
 }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const selfie = message.selfie;
@@ -157,6 +163,11 @@ export function MessageBubble({
           </div>
         )}
 
+        {/* Inline gift button — shown when character requests a gift */}
+        {!isUser && giftSlug && characterId && (
+          <GiftButtonLazy giftSlug={giftSlug} characterId={characterId} />
+        )}
+
         {/* Selfie image */}
         {selfie?.image_url && (
           <SelfieInline selfie={selfie} />
@@ -184,4 +195,21 @@ export function MessageBubble({
       </div>
     </div>
   );
+}
+
+/** Lazy-loaded gift button to avoid importing in every bubble */
+function GiftButtonLazy({ giftSlug, characterId }: { giftSlug: string; characterId: string }) {
+  const [GiftButton, setGiftButton] = useState<React.ComponentType<{
+    giftSlug: string;
+    characterId: string;
+  }> | null>(null);
+
+  useState(() => {
+    import('./gift-button').then((mod) => {
+      setGiftButton(() => mod.GiftButton);
+    });
+  });
+
+  if (!GiftButton) return null;
+  return <GiftButton giftSlug={giftSlug} characterId={characterId} />;
 }

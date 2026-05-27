@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useState, useRef, use } from 'react';
+import { useEffect, useState, useRef, use, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useChat } from '@/hooks/use-chat';
 import { MessageBubble } from '@/components/chat/message-bubble';
 import { ChatInput } from '@/components/chat/chat-input';
 import { ChatHeader } from '@/components/chat/chat-header';
 import { CharacterAvatar, TypingIndicator } from '@/components/common';
+import { GiftSheet } from '@/components/chat/gift-sheet';
+import { HeartClaimPopup } from '@/components/chat/heart-claim-popup';
 import type { DbCharacter } from '@/types';
 
 interface ChatPageProps {
@@ -17,13 +19,23 @@ export default function ChatPage({ params }: ChatPageProps) {
   const { id: conversationId } = use(params);
   const [character, setCharacter] = useState<DbCharacter | null>(null);
   const [pageLoading, setPageLoading] = useState(true);
+  const [giftSheetOpen, setGiftSheetOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
-  const { messages, isLoading, isSending, creditsRemaining, error, sendMessage } = useChat({
-    conversationId,
-  });
+  const {
+    messages,
+    isLoading,
+    isSending,
+    heartsRemaining,
+    error,
+    heartsExhausted,
+    exhaustionMessage,
+    lastGiftRequest,
+    sendMessage,
+    clearExhaustion,
+  } = useChat({ conversationId });
 
   // Load conversation data to get character info
   useEffect(() => {
@@ -58,6 +70,18 @@ export default function ChatPage({ params }: ChatPageProps) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Open gift sheet when hearts exhausted
+  useEffect(() => {
+    if (heartsExhausted) {
+      setGiftSheetOpen(true);
+    }
+  }, [heartsExhausted]);
+
+  // Handle heart claim
+  const handleHeartClaimed = useCallback((_amount: number, _balance: number) => {
+    // Hearts balance will be refreshed on next send
+  }, []);
 
   // Determine character accent color
   const accentColor = character?.slug === 'ren'
@@ -123,15 +147,26 @@ export default function ChatPage({ params }: ChatPageProps) {
               </span>
             </div>
 
-            {messages.map((msg) => (
-              <MessageBubble
-                key={msg.id}
-                message={msg}
-                characterAvatar={character.avatar_url}
-                characterName={character.name}
-                accentColor={accentColor}
-              />
-            ))}
+            {messages.map((msg, idx) => {
+              // Show gift button only on the latest AI message that has a gift request
+              const isLastMessage = idx === messages.length - 1;
+              const showGiftButton =
+                isLastMessage &&
+                msg.role === 'assistant' &&
+                lastGiftRequest;
+
+              return (
+                <MessageBubble
+                  key={msg.id}
+                  message={msg}
+                  characterAvatar={character.avatar_url}
+                  characterName={character.name}
+                  accentColor={accentColor}
+                  giftSlug={showGiftButton ? lastGiftRequest : null}
+                  characterId={character.id}
+                />
+              );
+            })}
 
             {/* Typing indicator */}
             {isSending && (
@@ -168,10 +203,28 @@ export default function ChatPage({ params }: ChatPageProps) {
       <div className="mx-auto w-full max-w-lg">
         <ChatInput
           onSend={sendMessage}
-          disabled={isSending || (creditsRemaining !== null && creditsRemaining <= 0)}
-          placeholder={`Message ${character.name}...`}
+          disabled={isSending || heartsExhausted}
+          placeholder={
+            heartsExhausted
+              ? 'Send a gift to keep chatting!'
+              : `Message ${character.name}...`
+          }
         />
       </div>
+
+      {/* Gift bottom sheet */}
+      <GiftSheet
+        isOpen={giftSheetOpen}
+        onClose={() => {
+          setGiftSheetOpen(false);
+          clearExhaustion();
+        }}
+        characterId={character.id}
+        exhaustionMessage={exhaustionMessage}
+      />
+
+      {/* Daily heart claim popup */}
+      <HeartClaimPopup onClaimed={handleHeartClaimed} />
     </main>
   );
 }

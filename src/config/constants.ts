@@ -4,20 +4,35 @@ export const APP_CONFIG = {
   url: process.env.NEXT_PUBLIC_APP_URL || 'https://vegamate.com',
 } as const;
 
-// ── Credit costs ────────────────────────────────────────────
-export const CREDIT_CONFIG = {
-  SIGNUP_BONUS: 50,          // free credits on signup
-  COST_PER_MESSAGE: 1,      // user sending a message
-  COST_PER_SELFIE: 3,       // receiving a selfie
-  AI_RESPONSE_COST: 0,      // AI text reply is free (included in user msg cost)
+// ── Heart system (replaces credits) ─────────────────────────
+export const HEART_CONFIG = {
+  /** Initial hearts for new signups (via handle_new_user trigger) */
+  SIGNUP_BONUS: 5,
+  /** Hearts consumed per chat turn (user message -> AI response) */
+  COST_PER_TURN: 1,
+  /** Proactive messages / selfies do NOT consume hearts */
+  PROACTIVE_COST: 0,
 } as const;
 
-// ── Credit packages (Creem) ─────────────────────────────────
-export const CREDIT_PACKAGES = [
-  { id: 'starter', name: 'Starter', credits: 100, price_usd: 2.99 },
-  { id: 'popular', name: 'Popular', credits: 350, price_usd: 7.99, badge: 'Best Value' },
-  { id: 'premium', name: 'Premium', credits: 800, price_usd: 14.99 },
+// ── Gift definitions (mirrors gifts table) ──────────────────
+// Used for frontend rendering. Actual values come from DB.
+export const GIFT_SLUGS = [
+  'coffee', 'milktea', 'cake', 'book', 'movie',
+  'flowers', 'plushie', 'clothes', 'airpods',
+  'dinner', 'ring', 'surprise',
 ] as const;
+
+export type GiftSlug = (typeof GIFT_SLUGS)[number];
+
+// ── Gift request frequency control ──────────────────────────
+export const GIFT_REQUEST_CONFIG = {
+  /** Max gift requests per day per character */
+  MAX_DAILY_REQUESTS: 3,
+  /** Minimum turns between gift requests */
+  MIN_TURNS_BETWEEN: 10,
+  /** Minimum hours between gift requests */
+  MIN_HOURS_BETWEEN: 2,
+} as const;
 
 // ── Selfie rarity system ────────────────────────────────────
 export const RARITY_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'] as const;
@@ -50,55 +65,64 @@ export const RARITY_COLORS: Record<SelfieRarity, string> = {
 // ── AI engagement config ────────────────────────────────────
 export const ENGAGEMENT_CONFIG = {
   DEFAULT_LEVEL: 5,
-  MIN_LEVEL: 0,              // AI goes silent
-  MAX_LEVEL: 10,             // AI very proactive
-  // Selfie trigger thresholds
-  MIN_MESSAGES_BEFORE_SELFIE: 3,  // minimum messages before first selfie
-  SELFIE_CHANCE_BASE: 0.15,       // 15% base chance per AI response
-  SELFIE_CHANCE_EMOTION_BOOST: 0.30, // +30% when emotion peak detected
+  MIN_LEVEL: 0,
+  MAX_LEVEL: 10,
+  MIN_MESSAGES_BEFORE_SELFIE: 3,
+  SELFIE_CHANCE_BASE: 0.15,
+  SELFIE_CHANCE_EMOTION_BOOST: 0.30,
 } as const;
 
 // ── LLM config ──────────────────────────────────────────────
 export const LLM_CONFIG = {
   MODEL: 'gpt-4o-mini',
-  MAX_CONTEXT_MESSAGES: 20,  // last N messages sent as context
-  MAX_TOKENS: 300,           // max response length
-  TEMPERATURE: 0.85,         // slightly creative
+  MAX_CONTEXT_MESSAGES: 20,
+  MAX_TOKENS: 300,
+  TEMPERATURE: 0.85,
 } as const;
 
 // ── Memory system config ────────────────────────────────────
 export const MEMORY_CONFIG = {
-  EXTRACTION_INTERVAL: 5,     // extract memories every N user messages
-  MAX_MEMORIES_INJECT: 30,    // max memories in system prompt
-  MIN_CONFIDENCE: 0.5,        // minimum confidence to save
+  EXTRACTION_INTERVAL: 5,
+  MAX_MEMORIES_INJECT: 30,
+  MIN_CONFIDENCE: 0.5,
 } as const;
 
 // ── Proactive message engine config ─────────────────────────
 export const PROACTIVE_CONFIG = {
-  /** Min hours since last message before eligible */
   MIN_INACTIVE_HOURS: 2,
-  /** Max hours -> after this always eligible */
   MAX_INACTIVE_HOURS: 8,
-  /** Max proactive messages per user per day */
   MAX_DAILY_SENDS: 3,
-  /** Max consecutive sends without user response */
   MAX_CONSECUTIVE_SENDS: 2,
-  /** Earliest hour to send (user local time) */
-  QUIET_HOURS_START: 23,  // 11 PM
-  /** Latest hour to wake up (user local time) */
-  QUIET_HOURS_END: 8,     // 8 AM
-  /** Max users to process per cron invocation (Vercel timeout safety) */
+  QUIET_HOURS_START: 23,
+  QUIET_HOURS_END: 8,
   BATCH_SIZE: 50,
-  /** Chance a proactive message includes a selfie (0.3 ~ 0.5) */
   SELFIE_CHANCE_MIN: 0.30,
   SELFIE_CHANCE_MAX: 0.50,
 } as const;
 
-/** Proactive selfie rarity distribution (different from chat selfie rates) */
 export const PROACTIVE_RARITY_RATES: Record<SelfieRarity, number> = {
   common: 0.60,
   uncommon: 0.25,
   rare: 0.10,
   epic: 0.04,
   legendary: 0.01,
+};
+
+// ── Character-specific heart exhaustion messages ─────────────
+// When hearts run out, character says goodbye naturally
+export const HEART_EXHAUSTION_MESSAGES: Record<string, string[]> = {
+  miku: [
+    '에잉 오늘 너무 많이 얘기했나 ㅋㅋ 내일 또 하자!',
+    '오늘 진짜 재밌었어~ 내일 보자!',
+    'ㅋㅋ 나 이제 좀 쉬어야 할 것 같아 내일 또 얘기해!',
+  ],
+  ren: [
+    '...내일 봐',
+    '오늘은 여기까지. ...내일 또 연락해',
+    '...졸려. 내일 봐.',
+  ],
+  default: [
+    "Let's talk more tomorrow!",
+    "I need some rest. See you tomorrow!",
+  ],
 };

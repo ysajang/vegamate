@@ -52,6 +52,19 @@ export async function generateAIResponse(
     systemPrompt += '\n\n' + memoryContext;
   }
 
+  // Gift request instruction — AI can hint for gifts naturally
+  // The marker will be stripped before showing to user; frontend renders a gift button instead
+  systemPrompt += `\n\n[GIFT SYSTEM]
+Occasionally (not every message!), you can hint that you want a gift. When you do, end your message with a marker like [GIFT:coffee] or [GIFT:cake].
+Available gift types: coffee, milktea, cake, book, movie, flowers, plushie, clothes, airpods, dinner.
+Rules:
+- Maximum once per 10 messages. Do NOT ask for a gift in every reply.
+- Work the hint naturally into conversation (e.g. "목 마르다..." then end with [GIFT:milktea]).
+- Never mention the marker text [GIFT:...] explicitly. The user cannot see it.
+- Never say "buy me" or "I want a gift". Just casually express desire for the item.
+- The marker MUST be the very last thing in your message on its own line.
+- If crisis/distress detected, NEVER request gifts.`;
+
   // If crisis detected, override selfie behavior (no selfie during crisis)
   const actualSendSelfie = crisisResult.isCrisis ? false : shouldIncludeSelfie;
 

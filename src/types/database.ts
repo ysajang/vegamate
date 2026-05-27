@@ -16,6 +16,7 @@ export type MessageContentType = 'text' | 'selfie' | 'text_with_selfie';
 export type CreditTxType = 'purchase' | 'consume_chat' | 'consume_selfie' | 'bonus' | 'refund';
 export type CreditTxStatus = 'pending' | 'completed' | 'failed' | 'refunded';
 export type MemoryType = 'fact' | 'preference' | 'event' | 'emotion';
+export type GiftTxStatus = 'pending' | 'completed' | 'failed' | 'refunded';
 
 // ── Database row types ──────────────────────────────────────
 
@@ -160,6 +161,54 @@ export interface DbProactiveMessageLog {
   selfie_rarity: string | null;
   tokens_used: number;
   sent_at: string;
+}
+
+// ── Gift & Heart types ───────────────────────────────────────
+
+export interface DbGift {
+  id: string;
+  slug: string;
+  name: string;
+  emoji: string;
+  price_usd: number;
+  hearts_value: number;
+  sort_order: number;
+  hearts_min: number | null;
+  hearts_max: number | null;
+  creem_product_id: string | null;
+  hint_pattern: string;
+  is_requestable: boolean;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface DbUserHearts {
+  user_id: string;
+  balance: number;
+  last_daily_claim: string | null;
+  consecutive_days: number;
+  total_earned: number;
+  total_spent: number;
+  updated_at: string;
+}
+
+export interface DbGiftTransaction {
+  id: string;
+  user_id: string;
+  character_id: string;
+  gift_id: string;
+  hearts_granted: number;
+  creem_checkout_id: string | null;
+  creem_payment_id: string | null;
+  status: GiftTxStatus;
+  created_at: string;
+}
+
+export interface ClaimDailyHeartsResult {
+  claimed: boolean;
+  amount: number;
+  consecutive_days: number;
+  balance: number;
 }
 
 // ── API response types ──────────────────────────────────────

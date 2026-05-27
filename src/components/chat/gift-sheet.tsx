@@ -1,0 +1,159 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { X } from 'lucide-react';
+
+interface GiftItem {
+  id: string;
+  slug: string;
+  name: string;
+  emoji: string;
+  price_usd: number;
+}
+
+interface GiftSheetProps {
+  isOpen: boolean;
+  onClose: () => void;
+  characterId: string;
+  exhaustionMessage?: string | null;
+}
+
+export function GiftSheet({
+  isOpen,
+  onClose,
+  characterId,
+  exhaustionMessage,
+}: GiftSheetProps) {
+  const [gifts, setGifts] = useState<GiftItem[]>([]);
+  const [loadingSlug, setLoadingSlug] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    async function loadGifts() {
+      try {
+        const res = await fetch('/api/gifts');
+        const json = await res.json();
+        if (json.success) {
+          setGifts(json.data.gifts);
+        }
+      } catch {
+        // Silent
+      }
+    }
+    loadGifts();
+  }, [isOpen]);
+
+  const handlePurchase = async (slug: string) => {
+    if (loadingSlug) return;
+    setLoadingSlug(slug);
+
+    try {
+      const res = await fetch('/api/gifts/purchase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gift_slug: slug,
+          character_id: characterId,
+        }),
+      });
+
+      const json = await res.json();
+      if (json.success && json.data.checkout_url) {
+        window.open(json.data.checkout_url, '_blank');
+      }
+    } catch {
+      // Silent
+    } finally {
+      setLoadingSlug(null);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 z-40"
+        style={{ background: 'rgba(0, 0, 0, 0.5)', backdropFilter: 'blur(4px)' }}
+        onClick={onClose}
+      />
+
+      {/* Sheet */}
+      <div
+        className="vm-animate-slide-up fixed inset-x-0 bottom-0 z-50 rounded-t-[20px] px-4 pb-8 pt-4"
+        style={{
+          background: 'var(--vm-card)',
+          borderTop: '1px solid var(--vm-glass-border)',
+          maxHeight: '70vh',
+          overflowY: 'auto',
+        }}
+      >
+        {/* Handle + close */}
+        <div className="mb-3 flex items-center justify-between">
+          <div
+            className="mx-auto h-1 w-10 rounded-full"
+            style={{ background: 'var(--vm-text-tertiary)' }}
+          />
+          <button
+            onClick={onClose}
+            className="absolute right-4 top-4 rounded-full p-1.5"
+            style={{ color: 'var(--vm-text-tertiary)' }}
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+
+        {/* Exhaustion message */}
+        {exhaustionMessage && (
+          <div
+            className="mb-4 rounded-2xl px-4 py-3 text-center text-[14px]"
+            style={{
+              background: 'rgba(124, 58, 237, 0.08)',
+              color: 'var(--vm-text-secondary)',
+            }}
+          >
+            {exhaustionMessage}
+          </div>
+        )}
+
+        <h3
+          className="mb-4 text-center text-[15px] font-semibold"
+          style={{ color: 'var(--vm-text-primary)' }}
+        >
+          Send a gift 🎁
+        </h3>
+
+        {/* Gift grid */}
+        <div className="grid grid-cols-3 gap-2.5">
+          {gifts.map((gift) => (
+            <button
+              key={gift.slug}
+              onClick={() => handlePurchase(gift.slug)}
+              disabled={loadingSlug !== null}
+              className="flex flex-col items-center gap-1 rounded-2xl p-3 transition-all duration-150 active:scale-95 disabled:opacity-50"
+              style={{
+                background: 'rgba(26, 26, 46, 0.5)',
+                border: '1px solid var(--vm-glass-border)',
+              }}
+            >
+              <span className="text-2xl">{gift.emoji}</span>
+              <span
+                className="text-[11px] font-medium"
+                style={{ color: 'var(--vm-text-secondary)' }}
+              >
+                {gift.name}
+              </span>
+              <span
+                className="text-[11px]"
+                style={{ color: 'var(--vm-purple-soft)' }}
+              >
+                {loadingSlug === gift.slug ? '...' : `$${gift.price_usd}`}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}

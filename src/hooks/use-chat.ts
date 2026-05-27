@@ -12,17 +12,26 @@ interface UseChatReturn {
   messages: DbMessage[];
   isLoading: boolean;
   isSending: boolean;
-  creditsRemaining: number | null;
+  heartsRemaining: number | null;
   error: string | null;
+  /** When hearts run out, character says goodbye */
+  heartsExhausted: boolean;
+  exhaustionMessage: string | null;
+  /** Gift slug the character is requesting (inline button) */
+  lastGiftRequest: string | null;
   sendMessage: (content: string) => Promise<void>;
+  clearExhaustion: () => void;
 }
 
 export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
   const [messages, setMessages] = useState<DbMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
-  const [creditsRemaining, setCreditsRemaining] = useState<number | null>(null);
+  const [heartsRemaining, setHeartsRemaining] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [heartsExhausted, setHeartsExhausted] = useState(false);
+  const [exhaustionMessage, setExhaustionMessage] = useState<string | null>(null);
+  const [lastGiftRequest, setLastGiftRequest] = useState<string | null>(null);
   const supabaseRef = useRef(createClient());
 
   // Load initial messages
@@ -50,20 +59,20 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
     loadMessages();
   }, [conversationId]);
 
-  // Load credits
+  // Load hearts balance
   useEffect(() => {
-    async function loadCredits() {
+    async function loadHearts() {
       try {
-        const res = await fetch('/api/credits');
+        const res = await fetch('/api/hearts');
         const json = await res.json();
         if (json.success) {
-          setCreditsRemaining(json.data.balance);
+          setHeartsRemaining(json.data.balance);
         }
       } catch {
-        // Silent fail for credits
+        // Silent fail
       }
     }
-    loadCredits();
+    loadHearts();
   }, []);
 
   // Subscribe to realtime messages
@@ -83,7 +92,6 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
         (payload) => {
           const newMessage = payload.new as DbMessage;
           setMessages((prev) => {
-            // Avoid duplicates (optimistic update may already have it)
             if (prev.some((m) => m.id === newMessage.id)) return prev;
             return [...prev, newMessage];
           });
@@ -103,6 +111,7 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
 
       setIsSending(true);
       setError(null);
+      setLastGiftRequest(null);
 
       // Optimistic update for user message
       const optimisticMsg: DbMessage = {
@@ -134,20 +143,31 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
         const json = await res.json();
 
         if (json.success) {
-          // Remove optimistic message, the realtime subscription will add the real ones
-          // But also add AI response immediately for snappy UX
+          // Check if hearts are exhausted
+          if (json.data.hearts_exhausted) {
+            setMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
+            setHeartsExhausted(true);
+            setExhaustionMessage(json.data.exhaustion_message);
+            setHeartsRemaining(0);
+            return;
+          }
+
+          // Normal response
           setMessages((prev) => {
             const withoutOptimistic = prev.filter((m) => m.id !== optimisticMsg.id);
-            // AI message from response (realtime might not have arrived yet)
             const aiMsg = json.data.message as DbMessage;
             if (withoutOptimistic.some((m) => m.id === aiMsg.id)) {
               return withoutOptimistic;
             }
             return [...withoutOptimistic, aiMsg];
           });
-          setCreditsRemaining(json.data.credits_remaining);
+          setHeartsRemaining(json.data.hearts_remaining);
+
+          // Check for gift request
+          if (json.data.gift_request) {
+            setLastGiftRequest(json.data.gift_request);
+          }
         } else {
-          // Remove optimistic message on error
           setMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
           setError(json.error || 'Failed to send message');
         }
@@ -161,12 +181,21 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
     [conversationId, isSending]
   );
 
+  const clearExhaustion = useCallback(() => {
+    setHeartsExhausted(false);
+    setExhaustionMessage(null);
+  }, []);
+
   return {
     messages,
     isLoading,
     isSending,
-    creditsRemaining,
+    heartsRemaining,
     error,
+    heartsExhausted,
+    exhaustionMessage,
+    lastGiftRequest,
     sendMessage,
+    clearExhaustion,
   };
 }
