@@ -15,5 +15,14 @@ export default async function AppLayout({
     redirect('/login');
   }
 
-  return <>{children}</>;
+  return (
+    <div
+      className="mx-auto h-dvh w-full max-w-[428px] overflow-hidden"
+      style={{
+        boxShadow: '0 0 80px rgba(59, 7, 100, 0.15)',
+      }}
+    >
+      {children}
+    </div>
+  );
 }
