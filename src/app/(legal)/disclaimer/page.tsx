@@ -100,9 +100,9 @@ export default function DisclaimerPage() {
           Content &amp; age restriction
         </h2>
         <p className="mb-3">
-          VegaMate is intended for users aged 18 and older. Some content may
-          include romantic or suggestive themes. By using VegaMate, you confirm
-          that you meet the minimum age requirement in your jurisdiction.
+          VegaMate is intended for users aged 18 and older. By using
+          VegaMate, you confirm that you meet the minimum age requirement
+          in your jurisdiction.
         </p>
         <p>
           AI-generated images are pre-created and curated. No real persons are

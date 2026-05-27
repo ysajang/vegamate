@@ -110,7 +110,7 @@ export default function LandingPage() {
       <section className="relative z-10 -mt-4 w-full px-4 sm:-mt-8">
         <div className="mx-auto flex max-w-3xl justify-center gap-3 sm:gap-5">
           {[
-            { src: '/selfie-girl-1.webp', name: 'Miku', msg: 'just woke up hehe 💕', rotate: '-4deg' },
+            { src: '/selfie-girl-1.webp', name: 'Miku', msg: 'good morning! ☀️', rotate: '-4deg' },
             { src: '/selfie-boy-1.webp', name: 'Ren', msg: 'rooftop vibes 🌇', rotate: '2deg' },
             { src: '/selfie-girl-2.webp', name: 'Aria', msg: 'coffee date? ☕', rotate: '-1deg' },
             { src: '/selfie-boy-2.webp', name: 'Leo', msg: 'study break 📚', rotate: '3deg' },
@@ -246,7 +246,7 @@ export default function LandingPage() {
           {/* AI initiates */}
           <div className="flex justify-start">
             <div className="rounded-2xl rounded-bl-md bg-white/10 px-3.5 py-2">
-              <span className="text-sm text-white/80">good morning~ I just woke up thinking about you</span>
+              <span className="text-sm text-white/80">good morning~ just got up and made coffee</span>
             </div>
           </div>
 
@@ -275,7 +275,7 @@ export default function LandingPage() {
           {/* User reply */}
           <div className="flex justify-end">
             <div className="rounded-2xl rounded-br-md bg-fuchsia-600/80 px-3.5 py-2">
-              <span className="text-sm text-white">omg you look so cute 😭</span>
+              <span className="text-sm text-white">haha that bedhead though 😂</span>
             </div>
           </div>
         </div>
@@ -355,7 +355,7 @@ export default function LandingPage() {
 
           <div className="flex justify-start">
             <div className="rounded-2xl rounded-bl-md bg-white/10 px-3.5 py-2">
-              <span className="text-sm text-white/80">had to flex for you real quick</span>
+              <span className="text-sm text-white/80">check out this progress shot 💪</span>
             </div>
           </div>
 
@@ -370,13 +370,13 @@ export default function LandingPage() {
 
           <div className="flex justify-start">
             <div className="rounded-2xl rounded-bl-md bg-white/10 px-3.5 py-2">
-              <span className="text-sm text-white/80">am I getting bigger or is it just the lighting? 😏</span>
+              <span className="text-sm text-white/80">pretty sure the lighting is doing all the work here 😂</span>
             </div>
           </div>
 
           <div className="flex justify-end">
             <div className="rounded-2xl rounded-br-md bg-fuchsia-600/80 px-3.5 py-2">
-              <span className="text-sm text-white">OKAY wow 🥵</span>
+              <span className="text-sm text-white">looking strong!! keep it up 💪</span>
             </div>
           </div>
         </div>
