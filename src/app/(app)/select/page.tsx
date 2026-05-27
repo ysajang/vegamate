@@ -159,14 +159,16 @@ export default function SelectPage() {
 
         {/* Character image or placeholder */}
         {char.avatar_url ? (
-          <Image
-            src={char.avatar_url}
-            alt={char.name}
-            fill
-            className="object-cover"
-            style={{ objectPosition: '50% 25%' }}
-            priority
-          />
+          <div className="relative mx-auto h-full w-full max-w-md">
+            <Image
+              src={char.avatar_url}
+              alt={char.name}
+              fill
+              className="object-cover"
+              style={{ objectPosition: '50% 25%' }}
+              priority
+            />
+          </div>
         ) : (
           <div className="flex flex-col items-center gap-3">
             <div
