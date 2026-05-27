@@ -26,6 +26,7 @@ export interface DbProfile {
   credit_balance: number;
   total_messages_sent: number;
   total_selfies_received: number;
+  user_gender: 'male' | 'female' | 'other' | null;
   created_at: string;
   updated_at: string;
 }
