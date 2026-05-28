@@ -53,18 +53,26 @@ function isQuietHours(timezone: string): boolean {
 
 /**
  * Check if the user should be eligible for a proactive message right now.
- * Uses randomized timing within the MIN~MAX inactive window.
+ *
+ * @param hoursInactive - Hours since user's last message
+ * @param ignoredCount - Number of recent proactive messages user ignored (didn't reply to)
+ *
+ * Backoff: each ignored message doubles the minimum wait time.
+ * 0 ignored -> 1.5h minimum (immediate trigger)
+ * 1 ignored -> 3h minimum
+ * 2 ignored -> 6h minimum (then hits MAX and stops via MAX_CONSECUTIVE_SENDS)
  */
-function shouldTriggerNow(hoursInactive: number): boolean {
+function shouldTriggerNow(hoursInactive: number, ignoredCount: number = 0): boolean {
   const { MIN_INACTIVE_HOURS, MAX_INACTIVE_HOURS } = PROACTIVE_CONFIG;
 
-  if (hoursInactive < MIN_INACTIVE_HOURS) return false;
-  if (hoursInactive >= MAX_INACTIVE_HOURS) return true;
+  // Backoff: double the minimum for each ignored proactive message
+  const backoffMultiplier = Math.pow(2, ignoredCount);
+  const effectiveMin = Math.min(MIN_INACTIVE_HOURS * backoffMultiplier, MAX_INACTIVE_HOURS);
 
-  // Random trigger probability increases linearly with inactivity
-  const range = MAX_INACTIVE_HOURS - MIN_INACTIVE_HOURS;
-  const progress = (hoursInactive - MIN_INACTIVE_HOURS) / range;
-  return Math.random() < progress;
+  if (hoursInactive < effectiveMin) return false;
+
+  // Once past the effective minimum -> send immediately (no randomness)
+  return true;
 }
 
 /**
@@ -182,11 +190,40 @@ export async function GET(req: NextRequest) {
           continue;
         }
 
-        // 4b. Inactivity window check
+        // 4b. Inactivity window check with backoff
         const lastUserMsg = new Date(conv.last_user_message_at!).getTime();
         const hoursInactive = (Date.now() - lastUserMsg) / (1000 * 60 * 60);
 
-        if (!shouldTriggerNow(hoursInactive)) {
+        // Count how many recent proactive messages user ignored (no reply after)
+        const { data: recentProactives } = await serviceClient
+          .from('proactive_message_log')
+          .select('sent_at')
+          .eq('user_id', userId)
+          .eq('character_id', characterId)
+          .order('sent_at', { ascending: false })
+          .limit(3);
+
+        let ignoredCount = 0;
+        if (recentProactives && recentProactives.length > 0) {
+          // Check if user replied after each proactive message
+          for (const log of recentProactives) {
+            const { data: userReply } = await serviceClient
+              .from('messages')
+              .select('id')
+              .eq('conversation_id', conv.id)
+              .eq('role', 'user')
+              .gt('created_at', log.sent_at)
+              .limit(1);
+
+            if (!userReply || userReply.length === 0) {
+              ignoredCount++;
+            } else {
+              break; // Stop counting at first replied-to message
+            }
+          }
+        }
+
+        if (!shouldTriggerNow(hoursInactive, ignoredCount)) {
           skipped++;
           continue;
         }

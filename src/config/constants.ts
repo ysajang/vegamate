@@ -89,7 +89,7 @@ export const MEMORY_CONFIG = {
 
 // ── Proactive message engine config ─────────────────────────
 export const PROACTIVE_CONFIG = {
-  MIN_INACTIVE_HOURS: 2,
+  MIN_INACTIVE_HOURS: 1.5,
   MAX_INACTIVE_HOURS: 8,
   MAX_DAILY_SENDS: 3,
   MAX_CONSECUTIVE_SENDS: 2,

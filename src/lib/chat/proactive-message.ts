@@ -127,8 +127,8 @@ export function pickCategory(
 // ── Tone guidance by elapsed time ─────────────────────────────
 
 function getToneGuidance(hoursInactive: number): string {
-  if (hoursInactive <= 4) {
-    return `It's only been ${Math.round(hoursInactive)} hours. Keep it light and casual like continuing a conversation you paused briefly. Reference the last topic directly.`;
+  if (hoursInactive <= 3) {
+    return `It's only been ${Math.round(hoursInactive * 10) / 10} hours. Keep it very light and casual like continuing a conversation you paused just a moment ago. Reference the last topic directly.`;
   }
   if (hoursInactive <= 6) {
     return `It's been about ${Math.round(hoursInactive)} hours. You can bring up something new but ground it in what you know about the user (from memories). Still casual.`;
