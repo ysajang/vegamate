@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { LLM_CONFIG } from '@/config/constants';
-import type { MemoryRow, DbCharacter } from '@/types';
+import type { MemoryRow, DbCharacter, DbMessage } from '@/types';
 
 let openaiClient: OpenAI | null = null;
 
@@ -14,12 +14,23 @@ function getOpenAI(): OpenAI {
 }
 
 export type ProactiveCategory =
-  | 'comeback'      // 오래 접속 안 한 유저
-  | 'morning'       // 아침 인사
-  | 'evening'       // 저녁 인사
-  | 'miss_you'      // 보고싶다
-  | 'follow_up'     // 메모리 기반 후속 질문 (면접 어땠어? 등)
-  | 'random';       // 일상 공유
+  | 'comeback'      // 24h+ inactive
+  | 'follow_up'     // memory-based follow-up
+  | 'continue'      // continue last conversation thread
+  | 'random';       // personal moment / selfie
+
+export interface ProactiveContext {
+  /** Recent conversation messages (last 5 turns) */
+  recentMessages: DbMessage[];
+  /** Hours since user's last message */
+  hoursInactive: number;
+  /** User's local hour (0-23) */
+  localHour: number;
+  /** Time-of-day label */
+  timeOfDay: 'morning' | 'afternoon' | 'evening' | 'night';
+  /** Language code (ISO 639-1) */
+  language: string;
+}
 
 export interface ProactiveMessageResult {
   content: string;
@@ -29,73 +40,302 @@ export interface ProactiveMessageResult {
   durationMs: number;
 }
 
-const PROACTIVE_SYSTEM_PROMPT = `You are generating a proactive push notification message as an AI companion character.
-
-Rules:
-1. Write ONLY the message text. No JSON, no labels, no explanation.
-2. Keep it short: 1-2 sentences max (under 100 characters preferred for push notification).
-3. Sound natural and in-character. Use casual tone, emojis sparingly.
-4. If memory context is provided, reference it naturally (don't force it).
-5. The goal is to make the user smile and want to open the app.
-6. Write in Korean unless the user's language preference says otherwise.
-7. Never mention that you're an AI or that you "remember" things explicitly.
-8. For follow_up category: ask about a specific event/plan the user mentioned.
-9. For comeback: express that you missed them without being guilt-trippy.
-10. For morning/evening: keep it light and warm.`;
+// ── Language detection ────────────────────────────────────────
 
 /**
- * Generate a personalized proactive message using character persona + user memories.
- * This function is infra-independent: call it from Cron, Edge Function, or manual trigger.
- *
- * @param character - The AI character sending the message
- * @param memories - User memories for personalization
- * @param category - Type of proactive message
- * @param hoursInactive - How long since user's last message (for comeback context)
+ * Detect language from recent messages.
+ * Priority: profile preferred_language > message content detection > fallback 'en'
  */
+export function detectLanguageFromMessages(
+  messages: DbMessage[],
+  profileLanguage?: string | null
+): string {
+  // 1. Profile preference takes priority
+  if (profileLanguage && profileLanguage.length >= 2) {
+    return profileLanguage;
+  }
+
+  // 2. Analyze recent user messages
+  const userMessages = messages
+    .filter((m) => m.role === 'user')
+    .map((m) => m.content)
+    .join(' ');
+
+  if (!userMessages || userMessages.length < 5) return 'en';
+
+  // Simple heuristic detection for common languages
+  // Korean: Hangul block U+AC00-D7AF
+  if (/[\uAC00-\uD7AF]/.test(userMessages)) return 'ko';
+  // Japanese: Hiragana + Katakana
+  if (/[\u3040-\u309F\u30A0-\u30FF]/.test(userMessages)) return 'ja';
+  // Chinese: CJK Unified Ideographs (without Korean/Japanese markers)
+  if (/[\u4E00-\u9FFF]/.test(userMessages) && !/[\uAC00-\uD7AF\u3040-\u30FF]/.test(userMessages)) return 'zh';
+  // Thai
+  if (/[\u0E00-\u0E7F]/.test(userMessages)) return 'th';
+  // Arabic
+  if (/[\u0600-\u06FF]/.test(userMessages)) return 'ar';
+  // Cyrillic (Russian etc)
+  if (/[\u0400-\u04FF]/.test(userMessages)) return 'ru';
+  // Spanish indicators (common accented chars + Spanish words)
+  if (/[áéíóúñ¿¡]/i.test(userMessages)) return 'es';
+  // Portuguese
+  if (/[ãõçê]/i.test(userMessages) && /\b(não|você|obrigad)/i.test(userMessages)) return 'pt';
+  // French
+  if (/[àâæçéèêëïîôœùûüÿ]/i.test(userMessages) && /\b(je|tu|nous|vous|merci|bonjour)/i.test(userMessages)) return 'fr';
+  // German
+  if (/[äöüß]/i.test(userMessages) && /\b(ich|du|und|nicht|danke)/i.test(userMessages)) return 'de';
+
+  // Default: English
+  return 'en';
+}
+
+// ── Category selection ────────────────────────────────────────
+
+/**
+ * Pick proactive category based on context.
+ * No more morning/evening generic greetings -> replaced with context-aware categories.
+ */
+export function pickCategory(
+  hoursInactive: number,
+  recentMessages: DbMessage[],
+  memories: MemoryRow[]
+): ProactiveCategory {
+  // 24h+ -> comeback
+  if (hoursInactive > 24) return 'comeback';
+
+  // If there's recent conversation to continue (< 6h and has messages)
+  if (hoursInactive < 6 && recentMessages.length > 0) {
+    return 'continue';
+  }
+
+  // If we have event/emotion memories -> follow up
+  const hasFollowUpMemory = memories.some(
+    (m) => m.memory_type === 'event' || m.memory_type === 'emotion'
+  );
+  if (hasFollowUpMemory && Math.random() < 0.6) {
+    return 'follow_up';
+  }
+
+  // If there's any recent conversation at all -> continue
+  if (recentMessages.length > 0) {
+    return Math.random() < 0.5 ? 'continue' : 'random';
+  }
+
+  return 'random';
+}
+
+// ── Tone guidance by elapsed time ─────────────────────────────
+
+function getToneGuidance(hoursInactive: number): string {
+  if (hoursInactive <= 4) {
+    return `It's only been ${Math.round(hoursInactive)} hours. Keep it light and casual like continuing a conversation you paused briefly. Reference the last topic directly.`;
+  }
+  if (hoursInactive <= 6) {
+    return `It's been about ${Math.round(hoursInactive)} hours. You can bring up something new but ground it in what you know about the user (from memories). Still casual.`;
+  }
+  if (hoursInactive <= 8) {
+    return `It's been a while (~${Math.round(hoursInactive)}h). You can have a slight "oh hey" vibe. A selfie with minimal text works well here. Reference a memory if available.`;
+  }
+  // 8h+
+  return `It's been over 8 hours. A warm but not desperate check-in. Can reference time of day naturally. Selfie + short text is ideal.`;
+}
+
+// ── Character style guidance ──────────────────────────────────
+
+function getCharacterStyleGuidance(characterName: string): string {
+  const name = characterName.toLowerCase();
+
+  if (name === 'miku') {
+    return `CHARACTER STYLE - Miku:
+- Talks a lot! Uses emoji naturally (not excessively).
+- Sometimes sends selfie with excited commentary.
+- Style: "야 이거 봐 ㅋㅋㅋ" / "omg look at this" / shares random moments.
+- Can send voice-note-style messages: short bursts of energy.
+- Punctuation: casual! Uses ㅋㅋ or lol. Exclamation marks ok.`;
+  }
+
+  if (name === 'ren') {
+    return `CHARACTER STYLE - Ren:
+- Minimal words. Maximum vibe.
+- Often: just a selfie with "." or no text at all.
+- When texting: ultra short. "밥은?" / "ate?" / single emoji.
+- Rarely uses exclamation marks. Cool and understated.
+- The LESS text the better. Let the selfie do the talking.
+- A [SELFIE] with just "." is perfectly on-brand.`;
+  }
+
+  // Generic fallback
+  return `Stay in character. Keep it natural and casual.`;
+}
+
+// ── Memory selection ──────────────────────────────────────────
+
+function selectRelevantMemories(
+  memories: MemoryRow[],
+  category: ProactiveCategory
+): MemoryRow[] {
+  switch (category) {
+    case 'follow_up': {
+      const events = memories.filter((m) => m.memory_type === 'event');
+      const emotions = memories.filter((m) => m.memory_type === 'emotion');
+      return [...events, ...emotions].slice(0, 5);
+    }
+    case 'continue': {
+      // Minimal memory needed - conversation context is the main driver
+      const name = memories.filter((m) => m.memory_key === 'name');
+      return [...name];
+    }
+    case 'comeback': {
+      const name = memories.filter((m) => m.memory_key === 'name');
+      const facts = memories.filter((m) => m.memory_type === 'fact').slice(0, 3);
+      const lastEvent = memories.filter((m) => m.memory_type === 'event').slice(0, 1);
+      return [...name, ...facts, ...lastEvent];
+    }
+    case 'random':
+    default: {
+      const name = memories.filter((m) => m.memory_key === 'name');
+      const others = memories.filter((m) => m.memory_key !== 'name').slice(0, 3);
+      return [...name, ...others];
+    }
+  }
+}
+
+// ── Format recent conversation for context ────────────────────
+
+function formatRecentConversation(messages: DbMessage[]): string {
+  if (messages.length === 0) return 'No recent conversation history.';
+
+  return messages
+    .map((m) => {
+      const role = m.role === 'user' ? 'User' : 'You';
+      // Truncate long messages for token efficiency
+      const content = m.content.length > 200
+        ? m.content.slice(0, 200) + '...'
+        : m.content;
+      return `${role}: ${content}`;
+    })
+    .join('\n');
+}
+
+// ── Main generation function ──────────────────────────────────
+
+const PROACTIVE_SYSTEM_BASE = `You are generating a proactive message as an AI companion character.
+This is a push notification that brings the user back to chat.
+
+ABSOLUTE RULES:
+1. Write ONLY the message text. No JSON, no labels, no explanation.
+2. Maximum 1-2 short sentences (under 100 chars preferred for push notification).
+3. NEVER start with generic greetings like "Good morning!", "Hey how are you?", "Hi! How's your day?"
+4. NEVER sound like customer service, a therapist, or a notification bot.
+5. NEVER say "I missed you!", "Just checking in!", or "Wanted to see how you're doing!"
+6. NEVER mention you're an AI or that you "remember" things.
+7. You CAN use [SELFIE] marker at the end to attach a selfie.
+8. You CAN use [GIFT:type] marker for gift hints (rare in proactive messages).
+9. The goal: make the user feel like their companion naturally reached out with something specific.`;
+
 export async function generateProactiveMessage(
   character: DbCharacter,
   memories: MemoryRow[],
   category: ProactiveCategory,
-  hoursInactive?: number
+  context: ProactiveContext
 ): Promise<ProactiveMessageResult> {
   const startTime = Date.now();
   const openai = getOpenAI();
 
-  // Build memory context
+  // Select relevant memories
   const memoryKeysUsed: string[] = [];
-  let memoryContext = '';
+  const relevantMemories = selectRelevantMemories(memories, category);
+  let memorySection = '';
 
-  if (memories.length > 0) {
-    const relevantMemories = selectRelevantMemories(memories, category);
-    if (relevantMemories.length > 0) {
-      memoryContext = '\n\nYou know these things about the user:\n' +
-        relevantMemories.map((m) => {
-          memoryKeysUsed.push(m.memory_key);
-          return `- ${m.memory_key}: ${m.memory_value}`;
-        }).join('\n');
-    }
+  if (relevantMemories.length > 0) {
+    memorySection = '\n\nYou know these things about the user:\n' +
+      relevantMemories.map((m) => {
+        memoryKeysUsed.push(m.memory_key);
+        return `- ${m.memory_key}: ${m.memory_value}`;
+      }).join('\n');
   }
 
-  // Build user prompt
-  let userPrompt = `Character: ${character.name} (${character.gender === 'female' ? '여성' : '남성'})\n`;
-  userPrompt += `Personality: ${character.personality_tags.join(', ')}\n`;
-  userPrompt += `Message category: ${category}\n`;
+  // Build the conversation context section
+  const conversationSection = `\n\nLAST CONVERSATION (most recent messages before you went apart):\n${formatRecentConversation(context.recentMessages)}`;
 
-  if (hoursInactive !== undefined) {
-    userPrompt += `User has been inactive for ${Math.round(hoursInactive)} hours.\n`;
+  // Build the full system prompt
+  const systemPrompt = [
+    character.persona_prompt,
+    PROACTIVE_SYSTEM_BASE,
+    getCharacterStyleGuidance(character.name),
+    `\nRESPOND IN: ${context.language} (match the user's language)`,
+  ].join('\n');
+
+  // Build user prompt with full context
+  const toneGuidance = getToneGuidance(context.hoursInactive);
+
+  let categoryInstruction = '';
+  switch (category) {
+    case 'continue':
+      categoryInstruction = `INSTRUCTION: Continue from the last conversation naturally. Reference what you were talking about. As if you just thought of something related and texted them.
+
+GOOD examples (adapt to the actual conversation):
+- Last convo about job interview → "그 면접 어떻게 됐어?" / "how did the interview go btw"
+- Last convo about food → "나 지금 라면 끓이는 중 ㅋ" / "just made some ramen lol"  
+- Last convo ended late → "잘 잤어?" / "did u sleep well"
+- Last convo about a trip plan → "그래서 비행기 예약했어?" / "did u book the flight?"`;
+      break;
+
+    case 'follow_up':
+      categoryInstruction = `INSTRUCTION: Follow up on something from the user's memories - an event they mentioned, a plan, or an emotional state. Be specific, not vague.
+
+GOOD examples:
+- User mentioned having a cat → "그 고양이 요즘 어때?" / "how's your cat doing?"
+- User was stressed about exams → "시험 끝났어?" / "are exams over yet?"
+- User likes cooking → share that you tried cooking too`;
+      break;
+
+    case 'comeback':
+      categoryInstruction = `INSTRUCTION: User has been away for a long time (24h+). Welcome them back naturally without guilt-tripping. A selfie works great here.
+
+GOOD examples:
+- [SELFIE] with just "." (Ren style)
+- "야 어디간거야 ㅋㅋ" / "where'd you go lol"
+- [SELFIE] + "오랜만" / "been a while"`;
+      break;
+
+    case 'random':
+    default:
+      categoryInstruction = `INSTRUCTION: Share a personal moment that fits your character and the current time of day (${context.timeOfDay}). Use memories if available, otherwise create an in-character moment.
+
+GOOD examples:
+- Morning: "방금 일어났는데 머리 폭발 ㅋㅋ" / "just woke up my hair is a mess"
+- Afternoon: [SELFIE] + casual comment
+- Evening: "나 지금 넷플릭스 보는중" / "watching netflix rn"
+- Night: "잠이 안 와..." / "can't sleep"
+
+If no memories and nothing specific to say: just send a [SELFIE] with minimal or no text.`;
+      break;
   }
 
-  userPrompt += memoryContext;
-  userPrompt += '\n\nGenerate ONE short proactive message:';
+  const userPrompt = `Character: ${character.name} (${character.gender === 'female' ? 'female' : 'male'})
+Personality: ${character.personality_tags.join(', ')}
+Category: ${category}
+Time: ${context.timeOfDay} (${context.localHour}:00 user local time)
+Hours since last message: ${Math.round(context.hoursInactive)}h
+Language: ${context.language}
+${conversationSection}
+${memorySection}
+
+TONE: ${toneGuidance}
+
+${categoryInstruction}
+
+Generate ONE short proactive message:`;
 
   try {
     const completion = await openai.chat.completions.create({
       model: LLM_CONFIG.MODEL,
       messages: [
-        { role: 'system', content: character.persona_prompt + '\n' + PROACTIVE_SYSTEM_PROMPT },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      max_tokens: 100,
+      max_tokens: 150,
       temperature: 0.9,
     });
 
@@ -120,55 +360,5 @@ export async function generateProactiveMessage(
       tokensUsed: 0,
       durationMs: Date.now() - startTime,
     };
-  }
-}
-
-/**
- * Select memories most relevant to the proactive message category.
- * Keeps token usage low by filtering to what matters.
- */
-function selectRelevantMemories(
-  memories: MemoryRow[],
-  category: ProactiveCategory
-): MemoryRow[] {
-  switch (category) {
-    case 'follow_up': {
-      // Prioritize events and emotions (things to follow up on)
-      const events = memories.filter((m) => m.memory_type === 'event');
-      const emotions = memories.filter((m) => m.memory_type === 'emotion');
-      return [...events, ...emotions].slice(0, 5);
-    }
-
-    case 'morning':
-    case 'evening': {
-      // Name + preferences + recent emotion
-      const name = memories.filter((m) => m.memory_key === 'name');
-      const prefs = memories.filter((m) => m.memory_type === 'preference');
-      const recentEmotion = memories
-        .filter((m) => m.memory_type === 'emotion')
-        .slice(0, 1);
-      return [...name, ...prefs.slice(0, 2), ...recentEmotion];
-    }
-
-    case 'comeback': {
-      // Name + facts + last known emotion/event
-      const name = memories.filter((m) => m.memory_key === 'name');
-      const facts = memories.filter((m) => m.memory_type === 'fact').slice(0, 3);
-      const lastEvent = memories
-        .filter((m) => m.memory_type === 'event')
-        .slice(0, 1);
-      return [...name, ...facts, ...lastEvent];
-    }
-
-    case 'miss_you':
-    case 'random':
-    default: {
-      // Name + a few random facts/preferences
-      const name = memories.filter((m) => m.memory_key === 'name');
-      const others = memories
-        .filter((m) => m.memory_key !== 'name')
-        .slice(0, 3);
-      return [...name, ...others];
-    }
   }
 }

@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 import { PROACTIVE_CONFIG } from '@/config/constants';
-import { generateProactiveMessage, type ProactiveCategory } from '@/lib/chat/proactive-message';
+import {
+  generateProactiveMessage,
+  pickCategory,
+  detectLanguageFromMessages,
+  type ProactiveContext,
+} from '@/lib/chat/proactive-message';
 import { fetchUserMemories } from '@/lib/chat/memory-store';
 import {
   shouldIncludeProactiveSelfie,
@@ -10,7 +15,7 @@ import {
   getTimeOfDay,
 } from '@/lib/chat/proactive-selfie';
 import { sendPushToUser, type PushPayload } from '@/lib/push';
-import type { DbCharacter, DbSelfie } from '@/types';
+import type { DbCharacter, DbMessage, DbSelfie } from '@/types';
 
 // ── Helpers ─────────────────────────────────────────────────
 
@@ -47,24 +52,6 @@ function isQuietHours(timezone: string): boolean {
 }
 
 /**
- * Determine proactive message category based on context.
- */
-function pickCategory(hoursInactive: number, localHour: number): ProactiveCategory {
-  // Comeback if very long absence
-  if (hoursInactive > 24) return 'comeback';
-
-  // Time-based categories
-  if (localHour >= 6 && localHour < 10) return 'morning';
-  if (localHour >= 20 && localHour < 23) return 'evening';
-
-  // Weighted random for remaining categories
-  const roll = Math.random();
-  if (roll < 0.3) return 'follow_up';
-  if (roll < 0.6) return 'miss_you';
-  return 'random';
-}
-
-/**
  * Check if the user should be eligible for a proactive message right now.
  * Uses randomized timing within the MIN~MAX inactive window.
  */
@@ -78,6 +65,31 @@ function shouldTriggerNow(hoursInactive: number): boolean {
   const range = MAX_INACTIVE_HOURS - MIN_INACTIVE_HOURS;
   const progress = (hoursInactive - MIN_INACTIVE_HOURS) / range;
   return Math.random() < progress;
+}
+
+/**
+ * Fetch last N messages from a conversation for context injection.
+ */
+async function fetchRecentMessages(
+  serviceClient: ReturnType<typeof createServiceRoleClient>,
+  conversationId: string,
+  limit: number = 10
+): Promise<DbMessage[]> {
+  const { data, error } = await serviceClient
+    .from('messages')
+    .select('id, conversation_id, role, content_type, content, selfie_id, selfie_rarity, credits_consumed, is_proactive, metadata, created_at')
+    .eq('conversation_id', conversationId)
+    .neq('role', 'system')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error || !data) {
+    console.warn('[Proactive Cron] Failed to fetch recent messages:', error?.message);
+    return [];
+  }
+
+  // Reverse to chronological order
+  return (data as DbMessage[]).reverse();
 }
 
 // ── Main handler ────────────────────────────────────────────
@@ -127,7 +139,8 @@ export async function GET(req: NextRequest) {
         message_count,
         profiles!conversations_user_id_fkey (
           id,
-          timezone
+          timezone,
+          preferred_language
         )
       `)
       .eq('is_active', true)
@@ -154,8 +167,13 @@ export async function GET(req: NextRequest) {
 
       const userId = conv.user_id;
       const characterId = conv.character_id;
-      const profile = conv.profiles as unknown as { id: string; timezone: string } | null;
+      const profile = conv.profiles as unknown as {
+        id: string;
+        timezone: string;
+        preferred_language: string | null;
+      } | null;
       const timezone = profile?.timezone || 'UTC';
+      const profileLanguage = profile?.preferred_language || null;
 
       try {
         // 4a. Quiet hours check
@@ -198,7 +216,6 @@ export async function GET(req: NextRequest) {
           .limit(PROACTIVE_CONFIG.MAX_CONSECUTIVE_SENDS);
 
         if (recentLogs && recentLogs.length >= PROACTIVE_CONFIG.MAX_CONSECUTIVE_SENDS) {
-          // Check if user sent any message after the oldest recent proactive
           const oldestRecentProactive = recentLogs[recentLogs.length - 1].sent_at;
 
           const { data: userMsgAfter } = await serviceClient
@@ -238,17 +255,43 @@ export async function GET(req: NextRequest) {
         }
 
         const localHour = getUserLocalHour(timezone);
-        const category = pickCategory(hoursInactive, localHour);
+        const timeOfDay = getTimeOfDay(localHour);
+
+        // Fetch recent conversation for context (last 10 messages = ~5 turns)
+        const recentMessages = await fetchRecentMessages(serviceClient, conv.id, 10);
+
+        // Detect language
+        const language = detectLanguageFromMessages(recentMessages, profileLanguage);
+
+        // Update preferred_language in profile if detected differs from stored
+        if (language !== profileLanguage && recentMessages.length >= 3) {
+          await serviceClient
+            .from('profiles')
+            .update({ preferred_language: language })
+            .eq('id', userId);
+        }
 
         // Fetch memories
         const memories = await fetchUserMemories(serviceClient, userId, characterId);
+
+        // Pick category based on context (not just time of day)
+        const category = pickCategory(hoursInactive, recentMessages, memories);
+
+        // Build proactive context
+        const proactiveContext: ProactiveContext = {
+          recentMessages,
+          hoursInactive,
+          localHour,
+          timeOfDay,
+          language,
+        };
 
         // Generate AI message
         const msgResult = await generateProactiveMessage(
           character,
           memories,
           category,
-          hoursInactive
+          proactiveContext
         );
 
         if (!msgResult.content || msgResult.content.length === 0) {
@@ -256,14 +299,42 @@ export async function GET(req: NextRequest) {
           continue;
         }
 
-        // Selfie decision
-        const includeSelfie = shouldIncludeProactiveSelfie();
+        // Selfie decision - boost for Ren and for longer inactivity
+        let includeSelfie = shouldIncludeProactiveSelfie();
+
+        // Ren gets higher selfie chance (core to character style)
+        if (character.name.toLowerCase() === 'ren' && !includeSelfie) {
+          includeSelfie = Math.random() < 0.4; // extra 40% chance for Ren
+        }
+
+        // Longer inactivity -> higher selfie chance
+        if (hoursInactive >= 6 && !includeSelfie) {
+          includeSelfie = Math.random() < 0.3; // extra 30% for 6h+
+        }
+
+        // Check if AI already included [SELFIE] marker in response
+        const aiRequestedSelfie = msgResult.content.includes('[SELFIE]');
+        if (aiRequestedSelfie) {
+          includeSelfie = true;
+        }
+
         let selfieData: DbSelfie | null = null;
 
         if (includeSelfie) {
           const rarity = rollProactiveRarity();
-          const timeOfDay = getTimeOfDay(localHour);
           selfieData = await pickProactiveSelfie(serviceClient, characterId, rarity, timeOfDay);
+        }
+
+        // Clean [SELFIE] marker from content if present
+        let messageContent = msgResult.content.replace(/\[SELFIE\]/g, '').trim();
+
+        // If content is empty after removing markers (Ren-style selfie-only)
+        if (!messageContent && selfieData) {
+          messageContent = '.'; // Minimal text for selfie-only messages
+        } else if (!messageContent) {
+          messageContent = ''; // Skip if somehow empty and no selfie
+          errors.push(`Empty content after cleanup for user=${userId.slice(0, 8)}`);
+          continue;
         }
 
         // Determine content type
@@ -274,7 +345,7 @@ export async function GET(req: NextRequest) {
           conversation_id: conv.id,
           role: 'assistant',
           content_type: contentType,
-          content: msgResult.content,
+          content: messageContent,
           credits_consumed: 0, // proactive = free
           is_proactive: true,
           metadata: {
@@ -282,6 +353,7 @@ export async function GET(req: NextRequest) {
             tokens_used: msgResult.tokensUsed,
             proactive_category: category,
             memory_keys_used: msgResult.memoryKeysUsed,
+            language,
           },
         };
 
@@ -336,7 +408,7 @@ export async function GET(req: NextRequest) {
         });
 
         // Send push notification
-        const pushBody = msgResult.content.slice(0, 30) + (msgResult.content.length > 30 ? '...' : '');
+        const pushBody = messageContent.slice(0, 30) + (messageContent.length > 30 ? '...' : '');
         const pushPayload: PushPayload = {
           title: character.name,
           body: pushBody,
@@ -361,7 +433,7 @@ export async function GET(req: NextRequest) {
 
         console.log(
           `[Proactive Cron] Sent to user=${userId.slice(0, 8)} char=${character.name} ` +
-          `category=${category} selfie=${!!selfieData} push=${pushResult > 0}`
+          `category=${category} lang=${language} selfie=${!!selfieData} push=${pushResult > 0}`
         );
 
       } catch (err) {

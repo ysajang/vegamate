@@ -28,6 +28,7 @@ export interface DbProfile {
   total_messages_sent: number;
   total_selfies_received: number;
   user_gender: 'male' | 'female' | 'other' | null;
+  preferred_language: string;
   created_at: string;
   updated_at: string;
 }
