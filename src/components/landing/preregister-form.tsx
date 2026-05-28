@@ -8,7 +8,7 @@ type FormState = 'idle' | 'submitting' | 'success';
 export function PreregisterForm({ themePreference }: { themePreference?: string }) {
   const [email, setEmail] = useState('');
   const [willingToPay, setWillingToPay] = useState(false);
-  const [ageConfirmed, setAgeConfirmed] = useState(false);
+  const [tosAgreed, setTosAgreed] = useState(false);
   const [state, setState] = useState<FormState>('idle');
 
   const handleSubmit = useCallback(
@@ -16,8 +16,8 @@ export function PreregisterForm({ themePreference }: { themePreference?: string 
       e.preventDefault();
       if (!email.trim()) return;
 
-      if (!ageConfirmed) {
-        toast.error('You must confirm you are 18 or older');
+      if (!tosAgreed) {
+        toast.error('Please agree to the Terms of Service');
         return;
       }
 
@@ -30,7 +30,7 @@ export function PreregisterForm({ themePreference }: { themePreference?: string 
           body: JSON.stringify({
             email: email.trim(),
             willing_to_pay: willingToPay,
-            source: 'landing_v3_selfie',
+            source: 'landing_v4_clean',
             theme_preference: themePreference || null,
           }),
         });
@@ -50,7 +50,7 @@ export function PreregisterForm({ themePreference }: { themePreference?: string 
         setState('idle');
       }
     },
-    [email, willingToPay, ageConfirmed, themePreference]
+    [email, willingToPay, tosAgreed, themePreference]
   );
 
   if (state === 'success') {
@@ -91,13 +91,13 @@ export function PreregisterForm({ themePreference }: { themePreference?: string 
           <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-amber-400/15 bg-amber-400/5 px-3 py-2.5 transition-colors hover:bg-amber-400/10">
             <input
               type="checkbox"
-              checked={ageConfirmed}
-              onChange={(e) => setAgeConfirmed(e.target.checked)}
+              checked={tosAgreed}
+              onChange={(e) => setTosAgreed(e.target.checked)}
               disabled={state === 'submitting'}
               className="h-4 w-4 rounded border-white/20 accent-amber-400"
             />
             <span className="text-xs text-amber-200/80">
-              I confirm I am 18 years or older
+              I agree to the Terms of Service
             </span>
           </label>
 
@@ -110,13 +110,13 @@ export function PreregisterForm({ themePreference }: { themePreference?: string 
               className="h-4 w-4 rounded border-white/20 accent-fuchsia-500"
             />
             <span className="text-xs text-white/50">
-              I&apos;d pay $7.99+/mo for unlimited chat &amp; bonus selfie pulls
+              I&apos;d pay $7.99+/mo for unlimited chat &amp; bonus selfie rewards
             </span>
           </label>
 
           <button
             onClick={handleSubmit}
-            disabled={state === 'submitting' || !email.trim() || !ageConfirmed}
+            disabled={state === 'submitting' || !email.trim() || !tosAgreed}
             className="h-11 w-full rounded-xl bg-gradient-to-r from-fuchsia-600 to-pink-600 text-sm font-bold text-white shadow-lg shadow-fuchsia-500/20 transition-all hover:shadow-fuchsia-500/30 hover:brightness-110 active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
           >
             {state === 'submitting' ? (
@@ -128,10 +128,6 @@ export function PreregisterForm({ themePreference }: { themePreference?: string 
               'Get Early Access'
             )}
           </button>
-
-          <p className="text-center text-[10px] text-white/20">
-            Contains suggestive content (bikini/lingerie). No nudity.
-          </p>
         </div>
       </div>
     </div>
