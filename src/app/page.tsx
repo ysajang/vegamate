@@ -173,16 +173,14 @@ export default function LandingPage() {
           <span className="bg-gradient-to-r from-fuchsia-400 to-pink-400 bg-clip-text text-transparent"> feels like</span>
         </h2>
 
-        {/* Yuna and Kai mockups hidden for Creem review - restore after approval */}
-
-        {/* Third chat mockup - Luna (cafe) */}
-        <div className="mt-6 flex flex-col gap-2.5 rounded-2xl border border-white/10 bg-[#111118] p-4">
+        {/* Chat mockup - Miku */}
+        <div className="flex flex-col gap-2.5 rounded-2xl border border-white/10 bg-[#111118] p-4">
           <div className="flex items-center gap-2.5 border-b border-white/5 pb-3">
             <div className="relative h-8 w-8 overflow-hidden rounded-full">
-              <Image src="/chat-girl-cafe.webp" alt="Luna" fill className="object-cover" sizes="32px" />
+              <Image src="/selfie-girl-1.webp" alt="Miku" fill className="object-cover" sizes="32px" />
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-semibold text-white/90">Luna</span>
+              <span className="text-sm font-semibold text-white/90">Miku</span>
               <span className="text-[10px] text-green-400/80">online</span>
             </div>
           </div>
@@ -190,20 +188,20 @@ export default function LandingPage() {
           {/* User message */}
           <div className="flex justify-end">
             <div className="rounded-2xl rounded-br-md bg-fuchsia-600/80 px-3.5 py-2">
-              <span className="text-sm text-white">what are you up to?</span>
+              <span className="text-sm text-white">hey what are you doing</span>
             </div>
           </div>
 
           {/* AI reply */}
           <div className="flex justify-start">
             <div className="rounded-2xl rounded-bl-md bg-white/10 px-3.5 py-2">
-              <span className="text-sm text-white/80">found this cute cafe near the station!!</span>
+              <span className="text-sm text-white/80">omg hiiii</span>
             </div>
           </div>
 
           <div className="flex justify-start">
             <div className="rounded-2xl rounded-bl-md bg-white/10 px-3.5 py-2">
-              <span className="text-sm text-white/80">look look look 📸</span>
+              <span className="text-sm text-white/80">wait let me show you something 📸</span>
             </div>
           </div>
 
@@ -211,67 +209,72 @@ export default function LandingPage() {
           <div className="flex justify-start">
             <div className="relative w-[200px] overflow-hidden rounded-2xl rounded-bl-md border border-white/10">
               <div className="relative aspect-[3/4] w-full">
-                <Image src="/chat-girl-cafe.webp" alt="Luna sent a cafe selfie" fill className="object-cover" sizes="200px" />
+                <Image src="/selfie-girl-1.webp" alt="Miku sent a selfie" fill className="object-cover" sizes="200px" />
               </div>
             </div>
           </div>
 
           <div className="flex justify-start">
             <div className="rounded-2xl rounded-bl-md bg-white/10 px-3.5 py-2">
-              <span className="text-sm text-white/80">rainy days + coffee = perfect combo ☕💜</span>
+              <span className="text-sm text-white/80">do I look cute today or what 😝</span>
             </div>
           </div>
 
           <div className="flex justify-end">
             <div className="rounded-2xl rounded-br-md bg-fuchsia-600/80 px-3.5 py-2">
-              <span className="text-sm text-white">that looks so cozy!! save me a seat</span>
+              <span className="text-sm text-white">you always look cute lol</span>
             </div>
           </div>
         </div>
 
-        {/* Fourth chat mockup - Sora (gym) */}
+        {/* Chat mockup - Ren */}
         <div className="mt-6 flex flex-col gap-2.5 rounded-2xl border border-white/10 bg-[#111118] p-4">
           <div className="flex items-center gap-2.5 border-b border-white/5 pb-3">
             <div className="relative h-8 w-8 overflow-hidden rounded-full">
-              <Image src="/chat-boy-gym.webp" alt="Sora" fill className="object-cover" sizes="32px" />
+              <Image src="/selfie-boy-1.webp" alt="Ren" fill className="object-cover" sizes="32px" />
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-semibold text-white/90">Sora</span>
+              <span className="text-sm font-semibold text-white/90">Ren</span>
               <span className="text-[10px] text-green-400/80">online</span>
             </div>
           </div>
 
-          {/* AI initiates */}
-          <div className="flex justify-start">
-            <div className="rounded-2xl rounded-bl-md bg-white/10 px-3.5 py-2">
-              <span className="text-sm text-white/80">just hit a new PR at the gym 💪</span>
-            </div>
-          </div>
-
-          <div className="flex justify-start">
-            <div className="rounded-2xl rounded-bl-md bg-white/10 px-3.5 py-2">
-              <span className="text-sm text-white/80">check out this progress shot 💪</span>
-            </div>
-          </div>
-
-          {/* Selfie */}
+          {/* AI initiates with selfie - no context, very Ren */}
           <div className="flex justify-start">
             <div className="relative w-[200px] overflow-hidden rounded-2xl rounded-bl-md border border-white/10">
               <div className="relative aspect-[3/4] w-full">
-                <Image src="/chat-boy-gym.webp" alt="Sora sent a gym selfie" fill className="object-cover" sizes="200px" />
+                <Image src="/selfie-boy-1.webp" alt="Ren sent a selfie" fill className="object-cover" sizes="200px" />
               </div>
             </div>
           </div>
 
           <div className="flex justify-start">
             <div className="rounded-2xl rounded-bl-md bg-white/10 px-3.5 py-2">
-              <span className="text-sm text-white/80">pretty sure the lighting is doing all the work here 😂</span>
+              <span className="text-sm text-white/80">.</span>
             </div>
           </div>
 
           <div className="flex justify-end">
             <div className="rounded-2xl rounded-br-md bg-fuchsia-600/80 px-3.5 py-2">
-              <span className="text-sm text-white">looking strong!! keep it up 💪</span>
+              <span className="text-sm text-white">wait where is that?? looks amazing</span>
+            </div>
+          </div>
+
+          <div className="flex justify-start">
+            <div className="rounded-2xl rounded-bl-md bg-white/10 px-3.5 py-2">
+              <span className="text-sm text-white/80">rooftop</span>
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <div className="rounded-2xl rounded-br-md bg-fuchsia-600/80 px-3.5 py-2">
+              <span className="text-sm text-white">take me next time!!</span>
+            </div>
+          </div>
+
+          <div className="flex justify-start">
+            <div className="rounded-2xl rounded-bl-md bg-white/10 px-3.5 py-2">
+              <span className="text-sm text-white/80">maybe</span>
             </div>
           </div>
         </div>
