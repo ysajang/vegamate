@@ -1,4 +1,4 @@
-import { RARITY_ORDER, RARITY_LABELS, RARITY_COLORS, RARITY_CONTENT } from '@/config/constants';
+import { RARITY_ORDER, RARITY_LABELS, RARITY_COLORS } from '@/config/constants';
 
 const RARITY_RATES: Record<string, string> = {
   common: '45%',
@@ -6,6 +6,14 @@ const RARITY_RATES: Record<string, string> = {
   rare: '15%',
   epic: '8%',
   legendary: '2%',
+};
+
+const RARITY_DESCRIPTIONS: Record<string, string> = {
+  common: 'Casual selfies',
+  uncommon: 'Stylish outfits',
+  rare: 'Special locations',
+  epic: 'Rare expressions',
+  legendary: 'Limited edition',
 };
 
 export function RarityShowcase() {
@@ -34,7 +42,7 @@ export function RarityShowcase() {
               {RARITY_LABELS[rarity]}
             </span>
             <span className="flex-1 text-[11px] text-muted-foreground/60">
-              {RARITY_CONTENT[rarity]}
+              {RARITY_DESCRIPTIONS[rarity]}
             </span>
             <span className="text-[11px] font-medium tabular-nums text-muted-foreground">
               {RARITY_RATES[rarity]}

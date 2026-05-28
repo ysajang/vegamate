@@ -75,8 +75,8 @@ export function checkRateLimit(
 
 /** Pre-configured rate limits */
 export const RATE_LIMITS = {
-  /** Gacha draws: 30 per minute */
-  gacha: { maxRequests: 30, windowSeconds: 60 } satisfies RateLimitConfig,
+  /** Chat messages: 20 per minute per user */
+  chat: { maxRequests: 20, windowSeconds: 60 } satisfies RateLimitConfig,
   /** Auth attempts: 10 per minute */
   auth: { maxRequests: 10, windowSeconds: 60 } satisfies RateLimitConfig,
   /** Pre-registration: 5 per minute */
