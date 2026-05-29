@@ -91,7 +91,7 @@ async function handler(req: NextRequest) {
     });
   }
 
-  let heartsRemaining = heartBalance as number;
+  const heartsRemaining = heartBalance as number;
 
   // 6. Save user message
   const { data: userMsg, error: userMsgError } = await serviceClient
@@ -328,6 +328,7 @@ async function handler(req: NextRequest) {
 
   // 14. Return response
   return apiSuccess({
+    user_message: userMsg as DbMessage,
     message: savedAiMsg as DbMessage,
     selfie: selfieData,
     hearts_remaining: heartsRemaining,
