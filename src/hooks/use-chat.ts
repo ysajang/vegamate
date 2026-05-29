@@ -171,7 +171,21 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
 
             const byId = new Map<string, DbMessage>();
             for (const m of prev) {
-              if (m.id === optimisticMsg.id) continue; // drop placeholder
+              // Drop the optimistic placeholder ONLY if we have an
+              // authoritative replacement for it (server-returned user_message
+              // or one already delivered via realtime). Otherwise keep it, so
+              // the user's bubble never vanishes mid-response.
+              if (m.id === optimisticMsg.id) {
+                const haveReplacement =
+                  !!realUserMsg ||
+                  prev.some(
+                    (x) =>
+                      x.role === 'user' &&
+                      x.id !== optimisticMsg.id &&
+                      x.content === optimisticMsg.content
+                  );
+                if (haveReplacement) continue;
+              }
               byId.set(m.id, m);
             }
             if (realUserMsg) byId.set(realUserMsg.id, realUserMsg);
