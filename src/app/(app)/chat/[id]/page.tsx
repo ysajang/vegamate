@@ -67,13 +67,25 @@ export default function ChatPage({ params }: ChatPageProps) {
   }, [conversationId, router]);
 
   // Auto-scroll to bottom on new messages and when the typing indicator appears.
-  // Scroll the container itself (not scrollIntoView on an anchor) so the last
-  // row is pinned to the bottom and never pushed up under the header.
+  // On initial load (isLoading flips false), scroll instantly so the user lands
+  // on the latest messages without a visible scroll animation.
+  const hasScrolledInitial = useRef(false);
   useEffect(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-  }, [messages, isSending]);
+    if (isLoading) return;              // messages not rendered yet
+
+    const isInitial = !hasScrolledInitial.current;
+    if (isInitial) {
+      // Use requestAnimationFrame to ensure DOM has committed
+      requestAnimationFrame(() => {
+        el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
+      });
+      hasScrolledInitial.current = true;
+    } else {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    }
+  }, [messages, isSending, isLoading]);
 
   // Open gift sheet when hearts exhausted
   useEffect(() => {
