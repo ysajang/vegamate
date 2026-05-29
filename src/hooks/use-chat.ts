@@ -19,9 +19,17 @@ interface UseChatReturn {
   exhaustionMessage: string | null;
   /** Gift slug the character is requesting (inline button) */
   lastGiftRequest: string | null;
+  /** Whether older messages exist to load (infinite scroll) */
+  hasMore: boolean;
+  /** Whether an older page is currently being fetched */
+  isLoadingMore: boolean;
+  /** Fetch the next older page; returns the number of messages prepended */
+  loadMore: () => Promise<number>;
   sendMessage: (content: string) => Promise<void>;
   clearExhaustion: () => void;
 }
+
+const PAGE_SIZE = 50;
 
 export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
   const [messages, setMessages] = useState<DbMessage[]>([]);
@@ -32,7 +40,14 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
   const [heartsExhausted, setHeartsExhausted] = useState(false);
   const [exhaustionMessage, setExhaustionMessage] = useState<string | null>(null);
   const [lastGiftRequest, setLastGiftRequest] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const supabaseRef = useRef(createClient());
+  // Mirror of messages for use inside callbacks without re-creating them.
+  const messagesRef = useRef<DbMessage[]>([]);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   // Load initial messages (shows loading spinner)
   useEffect(() => {
@@ -41,13 +56,14 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
       setError(null);
 
       try {
-        const res = await fetch(`/api/conversations/${conversationId}/messages?limit=50`, {
+        const res = await fetch(`/api/conversations/${conversationId}/messages?limit=${PAGE_SIZE}`, {
           cache: 'no-store',
         });
         const json = await res.json();
 
         if (json.success) {
           setMessages(json.data.messages);
+          setHasMore(!!json.data.has_more);
         } else {
           setError(json.error || 'Failed to load messages');
         }
@@ -293,6 +309,47 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
     setExhaustionMessage(null);
   }, []);
 
+  // Load the next older page (infinite scroll). Returns how many messages
+  // were prepended so the caller can preserve scroll position.
+  const loadMore = useCallback(async (): Promise<number> => {
+    if (isLoadingMore || !hasMore) return 0;
+
+    // Oldest persisted (non-optimistic) message is the cursor.
+    const oldest = messagesRef.current.find((m) => !m.id.startsWith('optimistic-'));
+    if (!oldest) return 0;
+
+    setIsLoadingMore(true);
+    try {
+      const res = await fetch(
+        `/api/conversations/${conversationId}/messages?limit=${PAGE_SIZE}&before=${encodeURIComponent(oldest.created_at)}`,
+        { cache: 'no-store' }
+      );
+      const json = await res.json();
+      if (!json.success) return 0;
+
+      const older = (json.data.messages || []) as DbMessage[];
+      setHasMore(!!json.data.has_more);
+
+      if (older.length === 0) return 0;
+
+      setMessages((prev) => {
+        const byId = new Map<string, DbMessage>();
+        for (const m of older) byId.set(m.id, m);
+        for (const m of prev) byId.set(m.id, m);
+        return Array.from(byId.values()).sort(
+          (a, b) =>
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
+      });
+
+      return older.length;
+    } catch {
+      return 0;
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [conversationId, isLoadingMore, hasMore]);
+
   return {
     messages,
     isLoading,
@@ -302,6 +359,9 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
     heartsExhausted,
     exhaustionMessage,
     lastGiftRequest,
+    hasMore,
+    isLoadingMore,
+    loadMore,
     sendMessage,
     clearExhaustion,
   };

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, use, useCallback } from 'react';
+import { useEffect, useLayoutEffect, useState, useRef, use, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronDown } from 'lucide-react';
 import { useChat } from '@/hooks/use-chat';
@@ -28,6 +28,9 @@ export default function ChatPage({ params }: ChatPageProps) {
   // fires when this is true (or the user just sent a message), so reading
   // older messages isn't interrupted by new incoming ones.
   const isNearBottomRef = useRef(true);
+  // When loading older messages, capture scrollHeight before prepend so we can
+  // restore the visual position afterward (no jump).
+  const prependAnchorRef = useRef<number | null>(null);
   const router = useRouter();
 
   const {
@@ -39,6 +42,9 @@ export default function ChatPage({ params }: ChatPageProps) {
     heartsExhausted,
     exhaustionMessage,
     lastGiftRequest,
+    hasMore,
+    isLoadingMore,
+    loadMore,
     sendMessage,
     clearExhaustion,
   } = useChat({ conversationId });
@@ -74,8 +80,23 @@ export default function ChatPage({ params }: ChatPageProps) {
 
   // Distance from the bottom (px) within which we consider the view "pinned".
   const NEAR_BOTTOM_THRESHOLD = 120;
+  // Trigger loading older messages when within this many px of the top.
+  const NEAR_TOP_THRESHOLD = 150;
 
-  // Track scroll position → toggle the scroll-down button and the near-bottom flag.
+  // Capture position, then load an older page (infinite scroll upward).
+  const triggerLoadMore = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    // Remember height before prepend so the layout effect can restore position.
+    prependAnchorRef.current = el.scrollHeight;
+    loadMore().then((added) => {
+      // If nothing was added, drop the anchor so we don't shift anything.
+      if (added === 0) prependAnchorRef.current = null;
+    });
+  }, [loadMore]);
+
+  // Track scroll position → toggle the scroll-down button, the near-bottom
+  // flag, and trigger upward infinite scroll near the top.
   const handleScroll = useCallback(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
@@ -83,7 +104,11 @@ export default function ChatPage({ params }: ChatPageProps) {
     const nearBottom = distanceFromBottom < NEAR_BOTTOM_THRESHOLD;
     isNearBottomRef.current = nearBottom;
     setShowScrollDown(!nearBottom);
-  }, []);
+
+    if (el.scrollTop < NEAR_TOP_THRESHOLD && hasMore && !isLoadingMore) {
+      triggerLoadMore();
+    }
+  }, [hasMore, isLoadingMore, triggerLoadMore]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
     const el = scrollContainerRef.current;
@@ -92,6 +117,16 @@ export default function ChatPage({ params }: ChatPageProps) {
     isNearBottomRef.current = true;
     setShowScrollDown(false);
   }, []);
+
+  // After older messages are prepended, restore the visual scroll position so
+  // the view doesn't jump. Runs synchronously before paint (useLayoutEffect).
+  useLayoutEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el || prependAnchorRef.current === null) return;
+    const heightDelta = el.scrollHeight - prependAnchorRef.current;
+    el.scrollTop += heightDelta;
+    prependAnchorRef.current = null;
+  }, [messages]);
 
   // Auto-scroll on new messages / typing indicator.
   // On initial load: instant scroll to the latest message.
@@ -102,6 +137,10 @@ export default function ChatPage({ params }: ChatPageProps) {
     const el = scrollContainerRef.current;
     if (!el) return;
     if (isLoading) return;              // messages not rendered yet
+
+    // Skip auto-scroll when this update was an older-page prepend (handled by
+    // the layout effect that preserves position).
+    if (prependAnchorRef.current !== null) return;
 
     const isInitial = !hasScrolledInitial.current;
     if (isInitial) {
@@ -183,6 +222,16 @@ export default function ChatPage({ params }: ChatPageProps) {
           </div>
         ) : (
           <div className="relative z-[1] mx-auto flex max-w-lg flex-col gap-4">
+            {/* Infinite-scroll loader for older messages */}
+            {isLoadingMore && (
+              <div className="flex justify-center py-1">
+                <div
+                  className="size-4 animate-spin rounded-full border-2 border-t-transparent"
+                  style={{ borderColor: 'var(--vm-purple-soft)', borderTopColor: 'transparent' }}
+                />
+              </div>
+            )}
+
             {/* Date separator */}
             <div className="flex justify-center py-2">
               <span
