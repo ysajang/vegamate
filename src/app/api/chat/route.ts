@@ -283,11 +283,9 @@ async function handler(req: NextRequest) {
   // extraction + DB writes actually complete. (Next.js 15.1+, Node.js runtime)
   after(async () => {
     try {
-      // incrementTurnCounter returns the counter value BEFORE increment.
-      // After this call the persisted counter is (turnCountBefore + 1),
-      // i.e. the number of user turns counted so far in this cycle.
-      const turnCountBefore = await incrementTurnCounter(serviceClient, conversationId);
-      const turnsCounted = turnCountBefore + 1;
+      // incrementTurnCounter now returns the counter value AFTER increment
+      // (atomic RPC), i.e. the number of user turns counted so far this cycle.
+      const turnsCounted = await incrementTurnCounter(serviceClient, conversationId);
 
       if (turnsCounted >= MEMORY_CONFIG.EXTRACTION_INTERVAL) {
         // Build extraction input from persisted history PLUS the just-saved

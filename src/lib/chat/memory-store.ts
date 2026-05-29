@@ -134,22 +134,21 @@ export async function incrementTurnCounter(
   serviceClient: SupabaseClient,
   conversationId: string
 ): Promise<number> {
-  // Fetch current value
-  const { data } = await serviceClient
-    .from('conversations')
-    .select('memory_turn_counter')
-    .eq('id', conversationId)
-    .single();
+  // Atomic increment via RPC. The previous read-then-write implementation
+  // raced when multiple after() callbacks ran concurrently (each read the
+  // same value and wrote the same +1), so the counter lagged far behind the
+  // real turn count and the extraction threshold was never reached.
+  // Returns the counter value AFTER increment.
+  const { data, error } = await serviceClient.rpc('increment_turn_counter', {
+    p_conversation_id: conversationId,
+  });
 
-  const currentCount = data?.memory_turn_counter ?? 0;
+  if (error) {
+    console.warn('[Memory] increment_turn_counter RPC failed:', error.message);
+    return 0;
+  }
 
-  // Increment
-  await serviceClient
-    .from('conversations')
-    .update({ memory_turn_counter: currentCount + 1 })
-    .eq('id', conversationId);
-
-  return currentCount;
+  return (data as number) ?? 0;
 }
 
 /**
