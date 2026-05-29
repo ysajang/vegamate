@@ -79,18 +79,17 @@ export default function LandingPage() {
       </section>
 
       {/* ── Selfie showcase: phone-like cards ── */}
-      <section className="relative z-10 -mt-4 w-full px-4 sm:-mt-8">
-        <div className="mx-auto flex max-w-3xl justify-center gap-3 sm:gap-5">
+      <section className="relative z-10 -mt-4 w-full sm:-mt-8">
+        <div className="mx-auto flex max-w-3xl snap-x snap-mandatory gap-3 overflow-x-auto scroll-smooth px-[max(1rem,calc(50%-90px))] pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:snap-none sm:justify-center sm:overflow-x-visible sm:px-4 sm:pb-0 sm:gap-5">
           {[
-            { src: '/selfie-girl-1.webp', name: 'Miku', msg: 'just woke up hehe 💕', rotate: '-4deg' },
-            { src: '/selfie-boy-1.webp', name: 'Ren', msg: 'rooftop vibes 🌇', rotate: '2deg' },
-            { src: '/selfie-girl-2.webp', name: 'Aria', msg: 'coffee date? ☕', rotate: '-1deg' },
-            { src: '/selfie-boy-2.webp', name: 'Leo', msg: 'study break 📚', rotate: '3deg' },
+            { src: '/selfie-girl-1.webp', name: 'Miku', msg: 'just woke up hehe 💕', rotate: 'sm:-rotate-3' },
+            { src: '/selfie-boy-1.webp', name: 'Ren', msg: 'rooftop vibes 🌇', rotate: 'sm:rotate-2' },
+            { src: '/selfie-girl-2.webp', name: 'Aria', msg: 'coffee date? ☕', rotate: 'sm:-rotate-1' },
+            { src: '/selfie-boy-2.webp', name: 'Leo', msg: 'study break 📚', rotate: 'sm:rotate-3' },
           ].map((card, i) => (
             <div
               key={card.src}
-              className="group relative w-[140px] flex-shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-[#111118] shadow-2xl shadow-black/60 transition-all duration-300 hover:scale-105 hover:border-fuchsia-500/30 sm:w-[180px]"
-              style={{ transform: `rotate(${card.rotate})` }}
+              className={`group relative w-[150px] flex-shrink-0 snap-center overflow-hidden rounded-2xl border border-white/10 bg-[#111118] shadow-2xl shadow-black/60 transition-all duration-300 hover:scale-105 hover:border-fuchsia-500/30 sm:w-[180px] ${card.rotate}`}
             >
               <div className="relative aspect-[3/4] w-full overflow-hidden">
                 <Image src={card.src} alt={card.name} fill className="object-cover transition-transform duration-500 group-hover:scale-110" sizes="(max-width: 640px) 140px, 180px" priority={i < 2} />
