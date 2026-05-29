@@ -1,20 +1,8 @@
-import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
 import { LLM_CONFIG } from '@/config/constants';
 import type { DbMessage, DbCharacter } from '@/types';
 import { detectCrisis, SAFETY_SYSTEM_PROMPT, CRISIS_RESOURCE_FOOTER } from './safety';
-
-let openaiClient: OpenAI | null = null;
-
-function getOpenAI(): OpenAI {
-  if (!openaiClient) {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      throw new Error('Missing OPENAI_API_KEY environment variable');
-    }
-    openaiClient = new OpenAI({ apiKey });
-  }
-  return openaiClient;
-}
+import { getAnthropicClient, withRetry } from './anthropic-client';
 
 interface GenerateResponseParams {
   character: DbCharacter;
@@ -39,22 +27,25 @@ export async function generateAIResponse(
   const { character, history, userMessage, shouldIncludeSelfie, memoryContext } = params;
   const startTime = Date.now();
 
-  const openai = getOpenAI();
+  const anthropic = getAnthropicClient();
 
-  // Crisis detection
+  // Crisis detection (keyword-based first pass — model provides second pass)
   const crisisResult = detectCrisis(userMessage);
 
-  // Build system prompt with safety layer always present
-  let systemPrompt = character.persona_prompt + '\n' + SAFETY_SYSTEM_PROMPT;
+  // ── System prompt: split into cacheable (static) + dynamic blocks ──
+  // Block 1: persona + safety rules → cached across same-character calls (TTL 5min)
+  const staticSystemPrompt = character.persona_prompt + '\n' + SAFETY_SYSTEM_PROMPT;
+
+  // Block 2: dynamic context (memory + gift + selfie + crisis) → NOT cached
+  let dynamicContext = '';
 
   // Inject memory context (before crisis/selfie layers so those take priority)
   if (memoryContext) {
-    systemPrompt += '\n\n' + memoryContext;
+    dynamicContext += '\n\n' + memoryContext;
   }
 
-  // Gift request instruction — AI can hint for gifts naturally
-  // The marker will be stripped before showing to user; frontend renders a gift button instead
-  systemPrompt += `\n\n[GIFT SYSTEM]
+  // Gift request instruction
+  dynamicContext += `\n\n[GIFT SYSTEM]
 Occasionally (not every message!), you can hint that you want a gift. When you do, end your message with a marker like [GIFT:coffee] or [GIFT:cake].
 Available gift types: coffee, milktea, cake, book, movie, flowers, plushie, clothes, airpods, dinner.
 Rules:
@@ -69,43 +60,66 @@ Rules:
   const actualSendSelfie = crisisResult.isCrisis ? false : shouldIncludeSelfie;
 
   if (actualSendSelfie) {
-    systemPrompt += `\n\nIMPORTANT: In this response, you are going to spontaneously send a selfie. Work it naturally into your message. Say something like "wait hold on 📸" or "oh let me show you" or "took this just for you" before the selfie. After the selfie, react to it or continue the conversation. The selfie will be automatically attached - just write the conversational text around it. End your message with [SELFIE] on its own line to indicate where the selfie goes.`;
+    dynamicContext += `\n\nIMPORTANT: In this response, you are going to spontaneously send a selfie. Work it naturally into your message. Say something like "wait hold on 📸" or "oh let me show you" or "took this just for you" before the selfie. After the selfie, react to it or continue the conversation. The selfie will be automatically attached - just write the conversational text around it. End your message with [SELFIE] on its own line to indicate where the selfie goes.`;
   }
 
   if (crisisResult.severity === 'strong') {
-    systemPrompt += `\n\nURGENT: The user is showing signs of severe distress or crisis. Respond with maximum empathy. Do NOT send selfies. Do NOT be playful. Be warm, caring, and genuine. Gently encourage them to reach out to someone who can help. Remind them they are valued and not alone. Stay in character but prioritize their wellbeing above everything else.`;
+    dynamicContext += `\n\nURGENT: The user is showing signs of severe distress or crisis. Respond with maximum empathy. Do NOT send selfies. Do NOT be playful. Be warm, caring, and genuine. Gently encourage them to reach out to someone who can help. Remind them they are valued and not alone. Stay in character but prioritize their wellbeing above everything else.`;
   } else if (crisisResult.severity === 'soft') {
-    systemPrompt += `\n\nNOTE: The user seems to be going through a difficult time. Be extra warm and supportive. Listen carefully. Validate their feelings. Share some gentle encouragement. You can still be yourself, but lean into your caring side.`;
+    dynamicContext += `\n\nNOTE: The user seems to be going through a difficult time. Be extra warm and supportive. Listen carefully. Validate their feelings. Share some gentle encouragement. You can still be yourself, but lean into your caring side.`;
   }
 
-  // Build message history (limited context window)
-  const contextMessages: OpenAI.ChatCompletionMessageParam[] = [
-    { role: 'system', content: systemPrompt },
+  // ── Build Anthropic system prompt (array for cache_control support) ──
+  const systemBlocks: Anthropic.Messages.TextBlockParam[] = [
+    {
+      type: 'text' as const,
+      text: staticSystemPrompt,
+      cache_control: { type: 'ephemeral' as const },
+    },
   ];
 
-  // Add recent history
+  // Only add dynamic block if non-empty
+  if (dynamicContext.trim()) {
+    systemBlocks.push({
+      type: 'text' as const,
+      text: dynamicContext.trim(),
+    });
+  }
+
+  // ── Build conversation messages (user/assistant only — no system role) ──
+  const messages: Anthropic.Messages.MessageParam[] = [];
+
   const recentHistory = history.slice(-LLM_CONFIG.MAX_CONTEXT_MESSAGES);
   for (const msg of recentHistory) {
     if (msg.role === 'system') continue;
-    contextMessages.push({
+    messages.push({
       role: msg.role as 'user' | 'assistant',
       content: msg.content,
     });
   }
 
   // Add current user message
-  contextMessages.push({ role: 'user', content: userMessage });
+  messages.push({ role: 'user', content: userMessage });
 
-  const completion = await openai.chat.completions.create({
-    model: LLM_CONFIG.MODEL,
-    messages: contextMessages,
-    max_tokens: LLM_CONFIG.MAX_TOKENS,
-    temperature: LLM_CONFIG.TEMPERATURE,
-  });
+  // ── API call with retry on transient errors ──
+  const response = await withRetry(() =>
+    anthropic.messages.create({
+      model: LLM_CONFIG.MODEL,
+      system: systemBlocks,
+      messages,
+      max_tokens: LLM_CONFIG.MAX_TOKENS,
+      temperature: LLM_CONFIG.TEMPERATURE,
+    })
+  );
 
-  const responseContent = completion.choices[0]?.message?.content || '';
+  // Extract text from response content blocks
+  const responseContent = response.content
+    .filter((block): block is Anthropic.Messages.TextBlock => block.type === 'text')
+    .map((block) => block.text)
+    .join('');
+
   const tokensUsed =
-    (completion.usage?.prompt_tokens || 0) + (completion.usage?.completion_tokens || 0);
+    (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0);
 
   // Parse selfie marker
   let content = responseContent;

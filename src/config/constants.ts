@@ -74,7 +74,7 @@ export const ENGAGEMENT_CONFIG = {
 
 // ── LLM config ──────────────────────────────────────────────
 export const LLM_CONFIG = {
-  MODEL: 'gpt-4o-mini',
+  MODEL: 'claude-haiku-4-5-20251001',
   MAX_CONTEXT_MESSAGES: 20,
   MAX_TOKENS: 300,
   TEMPERATURE: 0.85,
