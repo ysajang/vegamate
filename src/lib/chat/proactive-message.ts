@@ -43,25 +43,14 @@ export interface ProactiveMessageResult {
 // ── Language detection ────────────────────────────────────────
 
 /**
- * Detect language from recent messages.
- * Priority: profile preferred_language > message content detection > fallback 'en'
+ * Run heuristic language detection over a blob of user text.
+ * Returns an ISO 639-1 code, or null if no confident match.
+ *
+ * Input is expected to be already-validated user message text.
  */
-export function detectLanguageFromMessages(
-  messages: DbMessage[],
-  profileLanguage?: string | null
-): string {
-  // 1. Profile preference takes priority
-  if (profileLanguage && profileLanguage.length >= 2) {
-    return profileLanguage;
-  }
-
-  // 2. Analyze recent user messages
-  const userMessages = messages
-    .filter((m) => m.role === 'user')
-    .map((m) => m.content)
-    .join(' ');
-
-  if (!userMessages || userMessages.length < 5) return 'en';
+function detectLanguageFromText(userMessages: string): string | null {
+  // Need a minimum amount of text to be confident
+  if (!userMessages || userMessages.trim().length < 5) return null;
 
   // Simple heuristic detection for common languages
   // Korean: Hangul block U+AC00-D7AF
@@ -84,8 +73,45 @@ export function detectLanguageFromMessages(
   if (/[àâæçéèêëïîôœùûüÿ]/i.test(userMessages) && /\b(je|tu|nous|vous|merci|bonjour)/i.test(userMessages)) return 'fr';
   // German
   if (/[äöüß]/i.test(userMessages) && /\b(ich|du|und|nicht|danke)/i.test(userMessages)) return 'de';
+  // Latin-script text with enough length -> assume English
+  if (/[a-z]/i.test(userMessages)) return 'en';
 
-  // Default: English
+  // No confident match
+  return null;
+}
+
+/**
+ * Detect language for a proactive message.
+ *
+ * Priority (actual usage wins over stored preference):
+ *   1. Detected language from the user's recent messages (the ground truth)
+ *   2. Stored profile preferred_language (fallback when no recent text)
+ *   3. 'en' (final fallback for brand-new users with no history)
+ *
+ * Rationale: preferred_language defaults to 'en' at signup (migration 006),
+ * so trusting it first caused every user to be locked to English even when
+ * they chatted in Korean. The language the user actually types is authoritative.
+ */
+export function detectLanguageFromMessages(
+  messages: DbMessage[],
+  profileLanguage?: string | null
+): string {
+  // Validate + concatenate recent user messages
+  const userMessages = (Array.isArray(messages) ? messages : [])
+    .filter((m) => m && m.role === 'user' && typeof m.content === 'string')
+    .map((m) => m.content)
+    .join(' ');
+
+  // 1. Trust what the user actually typed
+  const detected = detectLanguageFromText(userMessages);
+  if (detected) return detected;
+
+  // 2. Fall back to stored profile preference (e.g. no recent text yet)
+  if (profileLanguage && profileLanguage.trim().length >= 2) {
+    return profileLanguage.trim();
+  }
+
+  // 3. Final fallback for brand-new users
   return 'en';
 }
 
