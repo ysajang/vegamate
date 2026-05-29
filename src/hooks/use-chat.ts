@@ -92,8 +92,30 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
         (payload) => {
           const newMessage = payload.new as DbMessage;
           setMessages((prev) => {
+            // Exact duplicate → skip
             if (prev.some((m) => m.id === newMessage.id)) return prev;
-            const merged = [...prev, newMessage];
+
+            // If the real user message arrived via Realtime before the API
+            // response, replace the optimistic placeholder to avoid a brief
+            // duplicate flash. Match by role + content + optimistic id prefix.
+            const optimisticIdx = newMessage.role === 'user'
+              ? prev.findIndex(
+                  (m) =>
+                    m.id.startsWith('optimistic-') &&
+                    m.role === 'user' &&
+                    m.content === newMessage.content
+                )
+              : -1;
+
+            let merged: DbMessage[];
+            if (optimisticIdx >= 0) {
+              // Swap optimistic → real in-place (preserves position)
+              merged = [...prev];
+              merged[optimisticIdx] = newMessage;
+            } else {
+              merged = [...prev, newMessage];
+            }
+
             // Keep chronological order — realtime can arrive out of order
             merged.sort(
               (a, b) =>

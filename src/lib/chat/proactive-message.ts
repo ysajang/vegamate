@@ -1,17 +1,6 @@
-import OpenAI from 'openai';
 import { LLM_CONFIG } from '@/config/constants';
 import type { MemoryRow, DbCharacter, DbMessage } from '@/types';
-
-let openaiClient: OpenAI | null = null;
-
-function getOpenAI(): OpenAI {
-  if (!openaiClient) {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) throw new Error('Missing OPENAI_API_KEY');
-    openaiClient = new OpenAI({ apiKey });
-  }
-  return openaiClient;
-}
+import { getAnthropicClient, withRetry } from './anthropic-client';
 
 export type ProactiveCategory =
   | 'comeback'      // 24h+ inactive
@@ -266,7 +255,7 @@ export async function generateProactiveMessage(
   context: ProactiveContext
 ): Promise<ProactiveMessageResult> {
   const startTime = Date.now();
-  const openai = getOpenAI();
+  const anthropic = getAnthropicClient();
 
   // Select relevant memories
   const memoryKeysUsed: string[] = [];
@@ -355,20 +344,26 @@ ${categoryInstruction}
 Generate ONE short proactive message:`;
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: LLM_CONFIG.MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      max_tokens: 150,
-      temperature: 0.9,
-    });
+    const response = await withRetry(() =>
+      anthropic.messages.create({
+        model: LLM_CONFIG.MODEL,
+        system: systemPrompt,
+        messages: [
+          { role: 'user', content: userPrompt },
+        ],
+        max_tokens: 150,
+        temperature: 0.9,
+      })
+    );
 
-    const content = completion.choices[0]?.message?.content?.trim() || '';
+    const content = response.content
+      .filter((block) => block.type === 'text')
+      .map((block) => ('text' in block ? block.text : ''))
+      .join('')
+      .trim();
     const tokensUsed =
-      (completion.usage?.prompt_tokens || 0) +
-      (completion.usage?.completion_tokens || 0);
+      (response.usage?.input_tokens || 0) +
+      (response.usage?.output_tokens || 0);
 
     return {
       content,
