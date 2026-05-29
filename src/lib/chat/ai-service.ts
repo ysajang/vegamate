@@ -11,6 +11,8 @@ interface GenerateResponseParams {
   shouldIncludeSelfie: boolean;
   /** Formatted memory context to inject into system prompt */
   memoryContext?: string;
+  /** Lifetime message count for this conversation — drives relationship-stage logic */
+  messageCount?: number;
 }
 
 interface GenerateResponseResult {
@@ -24,7 +26,7 @@ interface GenerateResponseResult {
 export async function generateAIResponse(
   params: GenerateResponseParams
 ): Promise<GenerateResponseResult> {
-  const { character, history, userMessage, shouldIncludeSelfie, memoryContext } = params;
+  const { character, history, userMessage, shouldIncludeSelfie, memoryContext, messageCount } = params;
   const startTime = Date.now();
 
   const anthropic = getAnthropicClient();
@@ -61,6 +63,34 @@ export async function generateAIResponse(
   // Inject memory context (before crisis/selfie layers so those take priority)
   if (memoryContext) {
     dynamicContext += '\n\n' + memoryContext;
+  }
+
+  // ── Relationship-stage awareness ──
+  // The companion must NOT act like it already knows the user on turn one.
+  // Stage is inferred from two signals: whether we have stored memories, and
+  // how many turns this conversation has. This is what makes memory feel
+  // earned (and is the core differentiator vs script-based competitors).
+  //   STRANGER  → no stored memories AND few turns: curious, getting-to-know,
+  //               naturally draws out name/context (which feeds memory extraction)
+  //   FAMILIAR  → some history but still light memory: warming up
+  //   KNOWN     → stored memories exist: recall and reference them
+  const hasMemory = Boolean(memoryContext && memoryContext.trim().length > 0);
+  const turns = messageCount ?? 0;
+
+  if (hasMemory) {
+    dynamicContext += `\n\n[RELATIONSHIP STAGE: KNOWN]
+You already know this user — memories about them are listed above. Talk like someone who remembers them: reference what you know naturally (not all at once), pick up where you left off. If they ask "do you know who I am / remember me?", warmly show that you do by recalling a specific detail. Never act like a stranger when you have memories of them.`;
+  } else if (turns < 6) {
+    dynamicContext += `\n\n[RELATIONSHIP STAGE: STRANGER — you JUST met this user]
+You do NOT know this person yet. This is the very beginning. Behave accordingly, IN YOUR OWN CHARACTER'S VOICE:
+- Do NOT claim closeness you haven't earned. Lines like "you're my person", "I've missed you", "only you" are WRONG right now — they break the illusion and make later intimacy meaningless.
+- Be genuinely curious about them. Naturally draw out who they are — their name, how their day was, what they're into — the way a real person feels out someone new they're interested in.
+- If they ask "do you know who I am?" / "내가 누군지 알아?": be honest in-character that you're still getting to know them, and express that you WANT to ("아직 잘 모르지... 근데 알아가고 싶어"). Curiosity, not coldness.
+- Stay fully in character: a warm character stays warm ("이제부터 알아가면 되지"), a cool character stays cool — but neither pretends to already know them.
+- This getting-to-know-you phase is the point: every detail they share is something you'll remember later.`;
+  } else {
+    dynamicContext += `\n\n[RELATIONSHIP STAGE: FAMILIAR]
+You've talked with this user a bit but don't have solid saved details about them yet. You're past strangers but not deeply close. Keep showing interest in learning more about them, reference the flow of your recent conversation, and don't overclaim deep intimacy you haven't built. Stay in character.`;
   }
 
   // Gift request instruction

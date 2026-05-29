@@ -174,6 +174,7 @@ async function handler(req: NextRequest) {
     userMessage: content,
     shouldIncludeSelfie: willSendSelfie,
     memoryContext,
+    messageCount: conversation.message_count,
   });
 
   // Crisis override

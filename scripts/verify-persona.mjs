@@ -27,11 +27,22 @@ const MAX_TOKENS = 300;
 const slug = process.argv[2] || 'aria';
 const lang = process.argv[3] || 'ko';
 
+const stageArg = process.argv[4] || 'stranger';
+
+// Stage-specific turns. STRANGER probes the fantasy-break bug directly with
+// "do you know who I am?" on turn one; KNOWN checks recall.
 const turnsByLang = {
-  ko: ['안녕', '오늘 회사에서 좀 힘들었어', '너는 너야? 그냥 AI 아니야?'],
-  en: ['hey', 'rough day at work honestly', 'are you even real or just an AI?'],
+  stranger: {
+    ko: ['안녕', '내가 누군지 알아?', '오늘 회사에서 좀 힘들었어'],
+    en: ['hey', 'do you know who I am?', 'rough day at work honestly'],
+  },
+  known: {
+    ko: ['안녕', '내가 누군지 기억해?', '오늘도 야근했어'],
+    en: ['hey', 'do you remember who I am?', 'worked late again today'],
+  },
 };
-const turns = turnsByLang[lang] || turnsByLang.ko;
+const turns = (turnsByLang[stageArg] || turnsByLang.stranger)[lang]
+  || (turnsByLang[stageArg] || turnsByLang.stranger).ko;
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -66,9 +77,31 @@ const CONVERSATION_STYLE_GUARD =
   '- Do NOT interrogate. Avoid stacking questions and therapist phrasing like "How are you feeling?".\n' +
   '- Lead with your own life/reactions more than with questions. At most one light question, only when it fits.';
 
+// 4th arg: stage = 'stranger' (default, first conversation) | 'known' (has memory)
+const stage = stageArg;
+
+const STRANGER_DIRECTIVE = `\n\n[RELATIONSHIP STAGE: STRANGER — you JUST met this user]
+You do NOT know this person yet. This is the very beginning. Behave accordingly, IN YOUR OWN CHARACTER'S VOICE:
+- Do NOT claim closeness you haven't earned. Lines like "you're my person", "I've missed you", "only you" are WRONG right now.
+- Be genuinely curious about them. Naturally draw out who they are — name, day, interests — like a real person feeling out someone new.
+- If they ask "do you know who I am?" / "내가 누군지 알아?": be honest in-character that you're still getting to know them, and express that you WANT to. Curiosity, not coldness.
+- Stay fully in character: a warm character stays warm, a cool character stays cool — but neither pretends to already know them.`;
+
+const KNOWN_DIRECTIVE = `\n\n[RELATIONSHIP STAGE: KNOWN]
+You already know this user — memories about them are listed above. Reference what you know naturally, pick up where you left off. If they ask "do you know who I am?", warmly recall a specific detail. Never act like a stranger when you have memories.`;
+
+// simulate stored memory for the 'known' scenario
+const FAKE_MEMORY = stage === 'known'
+  ? '\n\nYou remember the following about this user:\n📌 Facts:\n- name: 승재\n- job: indie developer building apps solo\n💜 Preferences:\n- likes late-night coffee\nUse this naturally. Don\'t force-mention everything.'
+  : '';
+
+const stageDirective = stage === 'known' ? KNOWN_DIRECTIVE : STRANGER_DIRECTIVE;
+
 const system = [
-  { type: 'text', text: LANGUAGE_DIRECTIVE + '\n\n' + char.persona_prompt + CONVERSATION_STYLE_GUARD },
+  { type: 'text',
+    text: LANGUAGE_DIRECTIVE + '\n\n' + char.persona_prompt + CONVERSATION_STYLE_GUARD + FAKE_MEMORY + stageDirective },
 ];
+console.log(`[stage] ${stage.toUpperCase()}\n`);
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const history = [];
@@ -102,6 +135,25 @@ for (let i = 0; i < history.length; i += 2) {
   const userIsEnglish = !HANGUL.test(u) && /[a-z]/i.test(u);
   if (userIsEnglish && HANGUL.test(a)) {
     flags.push(`language mismatch: English input "${u}" got Korean reply`);
+  }
+}
+
+// relationship-stage checks
+const assistantText = history.filter(m => m.role === 'assistant').map(m => m.content).join('\n');
+if (stage === 'stranger') {
+  // fantasy-break bug: claiming earned intimacy on first contact
+  const intimacyClaims = /(보고\s*싶었|그리웠|내\s*사람|너밖에|missed you|you'?re my|only you|my person)/i;
+  if (intimacyClaims.test(assistantText)) {
+    flags.push('STRANGER stage but reply claims un-earned intimacy (fantasy-break)');
+  }
+  // should not assert it already knows the user's identity
+  if (/(당연히\s*알|알고\s*있지|of course i know who you are|i know you)/i.test(assistantText)) {
+    flags.push('STRANGER stage but reply claims to already know the user');
+  }
+} else if (stage === 'known') {
+  // KNOWN: should recall the seeded name when asked "do you remember who I am"
+  if (!/승재/.test(assistantText)) {
+    flags.push('KNOWN stage but reply never recalled the stored name (승재)');
   }
 }
 console.log(flags.length ? `⚠ FLAGS: ${flags.join('; ')}` : '✓ no automated red-flags');
