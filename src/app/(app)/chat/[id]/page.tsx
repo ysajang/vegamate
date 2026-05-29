@@ -66,9 +66,13 @@ export default function ChatPage({ params }: ChatPageProps) {
     loadConversation();
   }, [conversationId, router]);
 
-  // Auto-scroll to bottom on new messages and when the typing indicator appears
+  // Auto-scroll to bottom on new messages and when the typing indicator appears.
+  // Scroll the container itself (not scrollIntoView on an anchor) so the last
+  // row is pinned to the bottom and never pushed up under the header.
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
   }, [messages, isSending]);
 
   // Open gift sheet when hearts exhausted
@@ -181,7 +185,7 @@ export default function ChatPage({ params }: ChatPageProps) {
               </div>
             )}
 
-            <div ref={messagesEndRef} />
+            <div ref={messagesEndRef} className="h-4 shrink-0" />
           </div>
         )}
       </div>
