@@ -49,9 +49,26 @@ if (error || !char) { console.error('character load failed:', error); process.ex
 console.log(`\n=== ${char.name} (${char.slug}) | active=${char.is_active} | persona_len=${char.persona_prompt.length} ===`);
 console.log(`[greeting] ${char.greeting_message}\n`);
 
-// mirror ai-service.ts: static persona block (we skip SAFETY/gift/style appends
-// here to isolate persona behavior; those only ADD guardrails in prod)
-const system = [{ type: 'text', text: char.persona_prompt }];
+// mirror ai-service.ts system construction so the test matches production:
+// language directive (prepended) + persona, plus the conversation-style guard
+// that lives in the dynamic block in prod. We omit gift/selfie/crisis appends
+// (those only add guardrails and aren't relevant to persona/lang checks).
+const LANGUAGE_DIRECTIVE =
+  '[LANGUAGE — HIGHEST PRIORITY, OVERRIDES EVERYTHING BELOW]\n' +
+  'Detect the language of the user\'s LATEST message and reply ONLY in that exact language. ' +
+  'This applies even to very short messages (e.g. "hey", "hi", "ok", "lol") and even when earlier messages used a different language — always follow the most recent user message. ' +
+  'Never mix languages in one reply. The examples written in Korean inside your persona are style references only; they do NOT mean you should answer in Korean when the user writes in another language.';
+
+const CONVERSATION_STYLE_GUARD =
+  '\n\n[CONVERSATION STYLE — IMPORTANT]\n' +
+  '- Do NOT fixate on meta or role-play remarks the user makes (e.g. "I created you", "you\'re an AI"). Acknowledge such a thing ONCE at most, lightly, then move on. NEVER re-raise it.\n' +
+  '- A simple greeting like "안녕" / "hi" gets a simple, warm, in-character reply. Do NOT interrogate or bring up a previous heavy topic.\n' +
+  '- Do NOT interrogate. Avoid stacking questions and therapist phrasing like "How are you feeling?".\n' +
+  '- Lead with your own life/reactions more than with questions. At most one light question, only when it fits.';
+
+const system = [
+  { type: 'text', text: LANGUAGE_DIRECTIVE + '\n\n' + char.persona_prompt + CONVERSATION_STYLE_GUARD },
+];
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const history = [];
@@ -75,4 +92,16 @@ if (/(가챠|크레딧|포인트|코인|토큰|gacha|credit|token)/i.test(all)) 
 if (/(how are you feeling|기분이 어때|힘들어 보이는데)/i.test(all)) flags.push('therapist-speak present');
 const longBlocks = history.filter(m=>m.role==='assistant').filter(m => m.content.split('\n').some(l => l.length > 160));
 if (longBlocks.length) flags.push('overly long line/block present');
+
+// language-match check: for each user turn detected as English (ASCII-only,
+// no Hangul), the matching assistant reply must not contain Hangul.
+const HANGUL = /[\uAC00-\uD7A3]/;
+for (let i = 0; i < history.length; i += 2) {
+  const u = history[i]?.content ?? '';
+  const a = history[i + 1]?.content ?? '';
+  const userIsEnglish = !HANGUL.test(u) && /[a-z]/i.test(u);
+  if (userIsEnglish && HANGUL.test(a)) {
+    flags.push(`language mismatch: English input "${u}" got Korean reply`);
+  }
+}
 console.log(flags.length ? `⚠ FLAGS: ${flags.join('; ')}` : '✓ no automated red-flags');

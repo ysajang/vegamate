@@ -39,8 +39,21 @@ export async function generateAIResponse(
   const crisisResult = detectCrisis(userMessage, recentUserMessages);
 
   // ── System prompt: split into cacheable (static) + dynamic blocks ──
-  // Block 1: persona + safety rules → cached across same-character calls (TTL 5min)
-  const staticSystemPrompt = character.persona_prompt + '\n' + SAFETY_SYSTEM_PROMPT;
+  // Block 1: language directive + persona + safety rules → cached across
+  // same-character calls (TTL 5min).
+  //
+  // The language line is prepended ABOVE the persona because the persona body
+  // is written largely in Korean; without a top-level override, short inputs
+  // like "hey" get pulled into Korean replies. This must win over the persona's
+  // own (weaker, mid-body) language note for every character.
+  const LANGUAGE_DIRECTIVE =
+    '[LANGUAGE — HIGHEST PRIORITY, OVERRIDES EVERYTHING BELOW]\n' +
+    'Detect the language of the user\'s LATEST message and reply ONLY in that exact language. ' +
+    'This applies even to very short messages (e.g. "hey", "hi", "ok", "lol") and even when earlier messages used a different language — always follow the most recent user message. ' +
+    'Never mix languages in one reply. The examples written in Korean inside your persona are style references only; they do NOT mean you should answer in Korean when the user writes in another language.';
+
+  const staticSystemPrompt =
+    LANGUAGE_DIRECTIVE + '\n\n' + character.persona_prompt + '\n' + SAFETY_SYSTEM_PROMPT;
 
   // Block 2: dynamic context (memory + gift + selfie + crisis) → NOT cached
   let dynamicContext = '';
