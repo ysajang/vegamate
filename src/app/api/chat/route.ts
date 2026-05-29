@@ -337,3 +337,8 @@ async function handler(req: NextRequest) {
 }
 
 export const POST = withErrorHandler(handler);
+
+// Allow time for the AI response plus the after() memory-extraction task to
+// finish. Stays within the Hobby non-fluid ceiling (60s); harmless if the
+// project has fluid compute enabled (higher default).
+export const maxDuration = 60;

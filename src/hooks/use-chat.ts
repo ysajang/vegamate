@@ -159,30 +159,28 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
           }
 
           // Normal response.
-          // Replace the optimistic user message with the real persisted one
-          // (do NOT just drop it — realtime delivery is best-effort and may
-          // never arrive, which would make the user's bubble vanish), then
-          // append the AI reply. id-dedupe guards against the realtime
-          // subscription also delivering either message.
+          // Realtime delivery is best-effort and races with this handler:
+          // the persisted user/AI messages may already be present (realtime
+          // won) or missing (realtime lost/late). So we drop the optimistic
+          // placeholder and merge the authoritative server messages by id,
+          // which is correct regardless of who arrived first. This avoids both
+          // a vanishing user bubble AND a duplicated one.
           setMessages((prev) => {
             const realUserMsg = json.data.user_message as DbMessage | undefined;
-            const aiMsg = json.data.message as DbMessage;
+            const aiMsg = json.data.message as DbMessage | undefined;
 
-            // Swap optimistic -> real user message (fallback: keep optimistic)
-            const base = prev.map((m) =>
-              m.id === optimisticMsg.id && realUserMsg ? realUserMsg : m
+            const byId = new Map<string, DbMessage>();
+            for (const m of prev) {
+              if (m.id === optimisticMsg.id) continue; // drop placeholder
+              byId.set(m.id, m);
+            }
+            if (realUserMsg) byId.set(realUserMsg.id, realUserMsg);
+            if (aiMsg) byId.set(aiMsg.id, aiMsg);
+
+            return Array.from(byId.values()).sort(
+              (a, b) =>
+                new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
             );
-
-            const next = [...base];
-            // Append real user message if it wasn't present to swap into
-            if (realUserMsg && !next.some((m) => m.id === realUserMsg.id)) {
-              next.push(realUserMsg);
-            }
-            // Append AI message if not already delivered via realtime
-            if (aiMsg && !next.some((m) => m.id === aiMsg.id)) {
-              next.push(aiMsg);
-            }
-            return next;
           });
           setHeartsRemaining(json.data.hearts_remaining);
 
