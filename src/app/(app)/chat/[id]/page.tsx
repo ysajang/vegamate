@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, use, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { ChevronDown } from 'lucide-react';
 import { useChat } from '@/hooks/use-chat';
 import { MessageBubble } from '@/components/chat/message-bubble';
 import { ChatInput } from '@/components/chat/chat-input';
@@ -20,8 +21,13 @@ export default function ChatPage({ params }: ChatPageProps) {
   const [character, setCharacter] = useState<DbCharacter | null>(null);
   const [pageLoading, setPageLoading] = useState(true);
   const [giftSheetOpen, setGiftSheetOpen] = useState(false);
+  const [showScrollDown, setShowScrollDown] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  // Whether the view is currently pinned near the bottom. Auto-scroll only
+  // fires when this is true (or the user just sent a message), so reading
+  // older messages isn't interrupted by new incoming ones.
+  const isNearBottomRef = useRef(true);
   const router = useRouter();
 
   const {
@@ -66,9 +72,31 @@ export default function ChatPage({ params }: ChatPageProps) {
     loadConversation();
   }, [conversationId, router]);
 
-  // Auto-scroll to bottom on new messages and when the typing indicator appears.
-  // On initial load (isLoading flips false), scroll instantly so the user lands
-  // on the latest messages without a visible scroll animation.
+  // Distance from the bottom (px) within which we consider the view "pinned".
+  const NEAR_BOTTOM_THRESHOLD = 120;
+
+  // Track scroll position → toggle the scroll-down button and the near-bottom flag.
+  const handleScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const nearBottom = distanceFromBottom < NEAR_BOTTOM_THRESHOLD;
+    isNearBottomRef.current = nearBottom;
+    setShowScrollDown(!nearBottom);
+  }, []);
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior });
+    isNearBottomRef.current = true;
+    setShowScrollDown(false);
+  }, []);
+
+  // Auto-scroll on new messages / typing indicator.
+  // On initial load: instant scroll to the latest message.
+  // After that: only follow new content when the user is already near the
+  // bottom OR just sent a message (isSending) — otherwise show the button.
   const hasScrolledInitial = useRef(false);
   useEffect(() => {
     const el = scrollContainerRef.current;
@@ -77,13 +105,18 @@ export default function ChatPage({ params }: ChatPageProps) {
 
     const isInitial = !hasScrolledInitial.current;
     if (isInitial) {
-      // Use requestAnimationFrame to ensure DOM has committed
       requestAnimationFrame(() => {
         el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
       });
       hasScrolledInitial.current = true;
-    } else {
+      return;
+    }
+
+    if (isNearBottomRef.current || isSending) {
       el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    } else {
+      // New content arrived while reading older messages → surface the button
+      setShowScrollDown(true);
     }
   }, [messages, isSending, isLoading]);
 
@@ -132,6 +165,7 @@ export default function ChatPage({ params }: ChatPageProps) {
       {/* Messages area */}
       <div
         ref={scrollContainerRef}
+        onScroll={handleScroll}
         className="vm-scrollbar-hide relative flex-1 overflow-y-auto px-3.5 py-4"
       >
         {/* Subtle ambient glow */}
@@ -215,6 +249,28 @@ export default function ChatPage({ params }: ChatPageProps) {
           {error}
         </div>
       )}
+
+      {/* Scroll-to-bottom button — floats above the input when scrolled up */}
+      <div className="pointer-events-none relative mx-auto w-full max-w-lg">
+        {showScrollDown && (
+          <button
+            type="button"
+            onClick={() => scrollToBottom('smooth')}
+            aria-label="Scroll to latest message"
+            className="vm-tap-none vm-animate-fade-in pointer-events-auto absolute -top-12 right-3.5 z-10 flex size-10 items-center justify-center rounded-full transition-transform active:scale-90"
+            style={{
+              background: 'var(--vm-glass)',
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+              border: '0.5px solid var(--vm-glass-border)',
+              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.3)',
+              color: accentColor,
+            }}
+          >
+            <ChevronDown size={20} strokeWidth={2.5} />
+          </button>
+        )}
+      </div>
 
       <div className="mx-auto w-full max-w-lg">
         <ChatInput
