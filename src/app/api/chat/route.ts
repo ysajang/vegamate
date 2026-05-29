@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, after } from 'next/server';
 import { createServerSupabase, createServiceRoleClient } from '@/lib/supabase/server';
 import { apiSuccess, apiError, withErrorHandler, AppError } from '@/lib/api-utils';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
@@ -277,19 +277,33 @@ async function handler(req: NextRequest) {
     .update({ total_messages_sent: (conversation.message_count || 0) + 1 })
     .eq('id', user.id);
 
-  // 13. Memory extraction (fire-and-forget)
-  (async () => {
+  // 13. Memory extraction (runs AFTER response is sent).
+  // NOTE: Vercel freezes the function once the response returns, killing any
+  // un-awaited "fire-and-forget" task. after() keeps the runtime alive so the
+  // extraction + DB writes actually complete. (Next.js 15.1+, Node.js runtime)
+  after(async () => {
     try {
-      const turnCount = await incrementTurnCounter(serviceClient, conversationId);
+      // incrementTurnCounter returns the counter value BEFORE increment.
+      // After this call the persisted counter is (turnCountBefore + 1),
+      // i.e. the number of user turns counted so far in this cycle.
+      const turnCountBefore = await incrementTurnCounter(serviceClient, conversationId);
+      const turnsCounted = turnCountBefore + 1;
 
-      if (turnCount + 1 >= MEMORY_CONFIG.EXTRACTION_INTERVAL) {
-        const recentForExtraction = history.slice(-MEMORY_CONFIG.EXTRACTION_INTERVAL * 2);
+      if (turnsCounted >= MEMORY_CONFIG.EXTRACTION_INTERVAL) {
+        // Build extraction input from persisted history PLUS the just-saved
+        // user message and AI reply (history was loaded before they existed).
+        const recentHistory = history.slice(-MEMORY_CONFIG.EXTRACTION_INTERVAL * 2);
+        const recentForExtraction: DbMessage[] = [
+          ...recentHistory,
+          userMsg as DbMessage,
+          ...(savedAiMsg ? [savedAiMsg as DbMessage] : []),
+        ];
         const existingContext = formatMemoriesForExtraction(existingMemories || []);
 
         const extractionResult = await extractMemories(recentForExtraction, existingContext);
 
         if (extractionResult.memories.length > 0) {
-          await saveExtractedMemories(
+          const saved = await saveExtractedMemories(
             serviceClient,
             user.id,
             character.id,
@@ -297,16 +311,20 @@ async function handler(req: NextRequest) {
             userMsg.id
           );
           console.log(
-            `[Chat] Extracted ${extractionResult.memories.length} memories (${extractionResult.tokensUsed} tokens, ${extractionResult.durationMs}ms)`
+            `[Chat] Memory: extracted ${extractionResult.memories.length}, saved ${saved} ` +
+              `(${extractionResult.tokensUsed} tokens, ${extractionResult.durationMs}ms)`
           );
+        } else {
+          console.log('[Chat] Memory: nothing new to extract this cycle');
         }
 
         await resetTurnCounter(serviceClient, conversationId);
       }
     } catch (err) {
+      // Non-critical: chat already succeeded. Log and swallow.
       console.warn('[Chat] Memory extraction failed (non-critical):', err);
     }
-  })();
+  });
 
   // 14. Return response
   return apiSuccess({
