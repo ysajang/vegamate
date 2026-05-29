@@ -1,6 +1,6 @@
 import { defaultCache } from '@serwist/next/worker';
-import type { PrecacheEntry, SerwistGlobalConfig } from 'serwist';
-import { Serwist } from 'serwist';
+import type { PrecacheEntry, RuntimeCaching, SerwistGlobalConfig } from 'serwist';
+import { Serwist, NetworkOnly } from 'serwist';
 
 declare global {
   interface WorkerGlobalScope extends SerwistGlobalConfig {
@@ -10,12 +10,27 @@ declare global {
 
 declare const self: ServiceWorkerGlobalScope & typeof globalThis;
 
+// Override: force NetworkOnly for ALL /api/ routes.
+// defaultCache ships a NetworkFirst rule for /api/ GET requests which
+// caches responses for up to 24 hours. For a chat app this causes
+// stale messages when switching between devices/tabs.
+const runtimeCaching: RuntimeCaching[] = [
+  // Our override — must come BEFORE the defaultCache entries
+  {
+    matcher: ({ sameOrigin, url: { pathname } }) =>
+      sameOrigin && pathname.startsWith('/api/'),
+    handler: new NetworkOnly(),
+  },
+  // Keep everything else from the default set
+  ...defaultCache,
+];
+
 const serwist = new Serwist({
   precacheEntries: self.__SW_MANIFEST,
   skipWaiting: true,
   clientsClaim: true,
   navigationPreload: true,
-  runtimeCaching: defaultCache,
+  runtimeCaching,
 });
 
 // Handle push notifications
