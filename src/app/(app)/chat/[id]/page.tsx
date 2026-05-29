@@ -66,10 +66,10 @@ export default function ChatPage({ params }: ChatPageProps) {
     loadConversation();
   }, [conversationId, router]);
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll to bottom on new messages and when the typing indicator appears
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, isSending]);
 
   // Open gift sheet when hearts exhausted
   useEffect(() => {
