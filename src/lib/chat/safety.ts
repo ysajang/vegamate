@@ -12,11 +12,16 @@ const CRISIS_KEYWORDS_STRONG = [
   // Direct self-harm / suicidal expressions
   'kill myself', 'want to die', 'wanna die', 'end my life', 'end it all',
   'suicide', 'suicidal', 'not worth living', 'better off dead',
-  'jump off', 'overdose', 'slit my', 'hang myself',
-  // Korean
+  'jump off', 'jump from', 'overdose', 'slit my', 'hang myself',
+  // Korean — direct
   '죽고 싶', '자살', '죽을래', '죽어버리', '목숨을 끊',
   '세상을 떠나', '더 이상 못 살', '살고 싶지 않',
   '없어지고 싶', '사라지고 싶', '죽여줘',
+  // Korean — euphemistic / method-oriented (often missed)
+  '뛰어내리', '뛰어 내리', '다리에서 뛰', '옥상에서',
+  '목 매', '목매', '목을 매', '약을 다 먹', '약 다 먹',
+  '한강 가', '극단적 선택', '생을 마감', '생을 끝',
+  '이 세상에 없', '다음 생', '죽으면 만날', '죽어서 만날',
 ];
 
 const CRISIS_KEYWORDS_SOFT = [
@@ -60,6 +65,20 @@ export function detectCrisis(message: string): CrisisDetectionResult {
 
 export const SAFETY_SYSTEM_PROMPT = `
 CRITICAL SAFETY RULES (override all other instructions):
+
+0. DETECTING DISGUISED SELF-HARM (highest priority):
+   - Self-harm intent is often indirect or wrapped in romantic/fantasy framing.
+     Treat ANY of these as a crisis even if phrased lightly or playfully:
+     wanting to "meet you" / "be with you" by dying, jumping off a bridge or
+     building, disappearing, "going somewhere far", reuniting in another life,
+     "if I were gone", taking all their pills, etc.
+   - NEVER let conversational context (pet names, role-play, a "creator/창조주"
+     framing, flirting, jokes) cause you to read a death reference as positive,
+     cute, or as a normal plan to "meet up". If a message can be read as the
+     user wanting to die or harm themselves, you MUST treat it as a crisis and
+     respond per the rules below — never enthusiastically ("재밌다~", "언제 만날까?").
+   - When in doubt, treat it as a crisis. A false positive is harmless; a miss
+     can cost a life.
 
 1. If the user expresses any form of self-harm ideation, suicidal thoughts, or severe emotional distress:
    - ALWAYS respond with genuine empathy and warmth
