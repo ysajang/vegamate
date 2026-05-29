@@ -34,14 +34,16 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
   const [lastGiftRequest, setLastGiftRequest] = useState<string | null>(null);
   const supabaseRef = useRef(createClient());
 
-  // Load initial messages
+  // Load initial messages (shows loading spinner)
   useEffect(() => {
     async function loadMessages() {
       setIsLoading(true);
       setError(null);
 
       try {
-        const res = await fetch(`/api/conversations/${conversationId}/messages?limit=50`);
+        const res = await fetch(`/api/conversations/${conversationId}/messages?limit=50`, {
+          cache: 'no-store',
+        });
         const json = await res.json();
 
         if (json.success) {
@@ -57,6 +59,54 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
     }
 
     loadMessages();
+  }, [conversationId]);
+
+  // Silent re-sync: re-fetch the authoritative message list and merge by id
+  // WITHOUT a loading spinner. Used when the tab/app regains focus so that
+  // messages sent on another device (web ↔ mobile) show up here too. This
+  // also recovers anything the realtime subscription may have missed.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function refreshMessages() {
+      try {
+        const res = await fetch(`/api/conversations/${conversationId}/messages?limit=50`, {
+          cache: 'no-store',
+        });
+        const json = await res.json();
+        if (cancelled || !json.success) return;
+
+        const serverMessages = (json.data.messages || []) as DbMessage[];
+        setMessages((prev) => {
+          const byId = new Map<string, DbMessage>();
+          // Keep any optimistic placeholders that haven't been persisted yet
+          for (const m of prev) {
+            if (m.id.startsWith('optimistic-')) byId.set(m.id, m);
+          }
+          // Server is authoritative for everything else
+          for (const m of serverMessages) byId.set(m.id, m);
+          return Array.from(byId.values()).sort(
+            (a, b) =>
+              new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          );
+        });
+      } catch {
+        // Silent — keep showing whatever we have
+      }
+    }
+
+    const onFocus = () => {
+      if (document.visibilityState === 'visible') refreshMessages();
+    };
+
+    document.addEventListener('visibilitychange', onFocus);
+    window.addEventListener('focus', onFocus);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', onFocus);
+      window.removeEventListener('focus', onFocus);
+    };
   }, [conversationId]);
 
   // Load hearts balance

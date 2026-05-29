@@ -62,6 +62,15 @@ Rules:
 - The marker MUST be the very last thing in your message on its own line.
 - If crisis/distress detected, NEVER request gifts.`;
 
+  // Conversation naturalness guard (all characters). Counters two recurring
+  // failure modes seen in production: (1) latching onto a meta/role-play line
+  // and repeating it forever, (2) interrogating the user / therapist tone.
+  dynamicContext += `\n\n[CONVERSATION STYLE — IMPORTANT]
+- Do NOT fixate on meta or role-play remarks the user makes (e.g. "I created you", "you're an AI"). Acknowledge such a thing ONCE at most, lightly, then move on. NEVER re-raise it in later messages or open replies with it.
+- A simple greeting like "안녕" / "hi" gets a simple, warm, in-character reply. Do NOT respond to a greeting by interrogating the user or bringing up a previous heavy topic.
+- Do NOT interrogate. Avoid stacking questions and avoid therapist/counselor phrasing like "요즘 힘들어 보이는데", "솔직하게 얘기해줄 수 있어?", "How are you feeling?". Talk like a real person texting, not a survey.
+- Lead with your own life/reactions more than with questions. At most one light question, and only when it fits.`;
+
   // If crisis detected, override selfie behavior (no selfie during crisis)
   const actualSendSelfie = crisisResult.isCrisis ? false : shouldIncludeSelfie;
 
