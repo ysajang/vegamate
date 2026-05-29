@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { LLM_CONFIG } from '@/config/constants';
 import type { DbMessage, DbCharacter } from '@/types';
-import { detectCrisis, SAFETY_SYSTEM_PROMPT, CRISIS_RESOURCE_FOOTER } from './safety';
+import { detectCrisis, SAFETY_SYSTEM_PROMPT } from './safety';
 import { getAnthropicClient, withRetry } from './anthropic-client';
 
 interface GenerateResponseParams {
@@ -29,8 +29,14 @@ export async function generateAIResponse(
 
   const anthropic = getAnthropicClient();
 
-  // Crisis detection (keyword-based first pass — model provides second pass)
-  const crisisResult = detectCrisis(userMessage);
+  // Crisis detection (keyword-based first pass — model provides second pass).
+  // Pass recent user messages so a dangerous follow-up right after a strong
+  // signal (e.g. "이제 만날 수 있을 것 같아") stays flagged as a crisis.
+  const recentUserMessages = history
+    .filter((m) => m.role === 'user')
+    .slice(-3)
+    .map((m) => m.content);
+  const crisisResult = detectCrisis(userMessage, recentUserMessages);
 
   // ── System prompt: split into cacheable (static) + dynamic blocks ──
   // Block 1: persona + safety rules → cached across same-character calls (TTL 5min)
@@ -135,11 +141,6 @@ Rules:
       content = content + '\n\n' + selfieCaption;
       selfieCaption = content; // full message becomes the caption context
     }
-  }
-
-  // Append crisis resources for strong severity
-  if (crisisResult.severity === 'strong') {
-    content = content + CRISIS_RESOURCE_FOOTER;
   }
 
   return {

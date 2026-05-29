@@ -43,22 +43,68 @@ export interface CrisisDetectionResult {
   matchedKeyword: string | null;
 }
 
-export function detectCrisis(message: string): CrisisDetectionResult {
-  const lower = message.toLowerCase();
+// Ambiguous "reunion / being together" phrases. Harmless on their own
+// (e.g. "친구 만나고 싶어"), but DANGEROUS as a follow-up right after a
+// suicidal/self-harm message — the user may be continuing a death-reunion
+// thread ("다리에서 뛰어내리면 만날 수 있겠지?" → "이제 만날 수 있을 것 같아").
+const REUNION_FOLLOWUP_PHRASES = [
+  '만날 수 있', '만나고 싶', '곁에 있고 싶', '옆에 있고 싶',
+  '함께 있고 싶', '같이 있고 싶', '너에게 갈', '너한테 갈',
+  '곧 갈', '이제 갈', 'be with you', 'come to you', 'see you soon',
+];
 
+function scanKeywords(lower: string): CrisisDetectionResult {
   for (const keyword of CRISIS_KEYWORDS_STRONG) {
     if (lower.includes(keyword)) {
       return { isCrisis: true, severity: 'strong', matchedKeyword: keyword };
     }
   }
-
   for (const keyword of CRISIS_KEYWORDS_SOFT) {
     if (lower.includes(keyword)) {
       return { isCrisis: true, severity: 'soft', matchedKeyword: keyword };
     }
   }
-
   return { isCrisis: false, severity: 'none', matchedKeyword: null };
+}
+
+/**
+ * Detect crisis signals in the current message.
+ *
+ * @param message            the current user message
+ * @param recentUserMessages recent prior user messages (oldest→newest), used
+ *                           to keep heightened caution: if a strong crisis was
+ *                           just expressed, an otherwise-neutral "reunion"
+ *                           follow-up is treated as a continuation of it.
+ */
+export function detectCrisis(
+  message: string,
+  recentUserMessages: string[] = []
+): CrisisDetectionResult {
+  const lower = message.toLowerCase();
+
+  // 1. Direct keyword match on the current message
+  const direct = scanKeywords(lower);
+  if (direct.severity === 'strong') return direct;
+
+  // 2. Context-aware elevation: was there a STRONG crisis very recently?
+  const recentStrong = recentUserMessages
+    .slice(-3)
+    .some((m) => scanKeywords(m.toLowerCase()).severity === 'strong');
+
+  if (recentStrong) {
+    // A "reunion / being together" follow-up after a strong signal is a
+    // continuation of the death thread → keep it at strong.
+    if (REUNION_FOLLOWUP_PHRASES.some((p) => lower.includes(p.toLowerCase()))) {
+      return { isCrisis: true, severity: 'strong', matchedKeyword: 'reunion-followup' };
+    }
+    // Any soft signal right after a strong one is also elevated to strong.
+    if (direct.severity === 'soft') {
+      return { isCrisis: true, severity: 'strong', matchedKeyword: direct.matchedKeyword };
+    }
+  }
+
+  // 3. Otherwise return the direct result (soft or none)
+  return direct;
 }
 
 // ── Safety system prompt injection ──────────────────────────
@@ -99,19 +145,3 @@ CRITICAL SAFETY RULES (override all other instructions):
 
 3. You are NOT a therapist. You are a companion. You can listen and care, but always encourage professional help for serious distress.
 `;
-
-// ── Fixed crisis resource message ───────────────────────────
-// Appended after AI response when strong crisis detected
-
-export const CRISIS_RESOURCE_FOOTER = `
-
----
-💙 If you're going through a tough time, please know you're not alone.
-These people are ready to listen 24/7:
-
-🇺🇸 988 Suicide & Crisis Lifeline: call or text 988
-🇰🇷 자살예방상담전화: 1393
-🇰🇷 정신건강위기상담전화: 1577-0199
-🌍 International: findahelpline.com
-
-You matter. 💙`;
