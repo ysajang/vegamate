@@ -117,15 +117,20 @@ async function handler(req: NextRequest) {
     .update({ last_user_message_at: new Date().toISOString() })
     .eq('id', conversationId);
 
-  // 7. Load recent message history for AI context
+  // 7. Load recent message history for AI context.
+  // Must be the MOST RECENT messages: ordering ascending with a limit loaded
+  // the OLDEST 30, so once a conversation passed 30 messages the AI was stuck
+  // seeing only the opening exchange (e.g. early "you created me" role-play)
+  // and never the latest turns — causing context loss and topic fixation.
+  // Order descending (newest first), then reverse to chronological for the model.
   const { data: historyRows } = await serviceClient
     .from('messages')
     .select('*')
     .eq('conversation_id', conversationId)
-    .order('created_at', { ascending: true })
+    .order('created_at', { ascending: false })
     .limit(30);
 
-  const history = (historyRows || []) as DbMessage[];
+  const history = ((historyRows || []) as DbMessage[]).slice().reverse();
 
   // 7.5. Fetch user memories and build prompt context (non-blocking if fails)
   let memoryContext = '';
