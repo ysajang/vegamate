@@ -1,6 +1,6 @@
+import OpenAI from 'openai';
 import { LLM_CONFIG } from '@/config/constants';
 import type { DbMessage, ExtractedMemory, MemoryType } from '@/types';
-import { getAnthropicClient, withRetry } from './anthropic-client';
 
 // ── Sensitive info patterns to filter ───────────────────────
 const SENSITIVE_PATTERNS = [
@@ -76,8 +76,7 @@ Rules:
 9. Do NOT extract phone numbers, email addresses, home addresses, or ID numbers
 10. Assign confidence 0.5-1.0 based on how explicitly the user stated it
 
-Respond ONLY with a JSON array. No markdown fences, no explanation, no preamble. Just the raw JSON array.
-If nothing new to extract, respond with exactly: []
+Respond ONLY with a JSON array. No other text. If nothing new to extract, respond with [].
 
 Example output:
 [
@@ -87,6 +86,17 @@ Example output:
   {"key": "upcoming_event", "value": "내일 면접이 있음", "type": "event", "confidence": 0.85},
   {"key": "current_mood", "value": "야근 때문에 피곤함", "type": "emotion", "confidence": 0.7}
 ]`;
+
+let openaiClient: OpenAI | null = null;
+
+function getOpenAI(): OpenAI {
+  if (!openaiClient) {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) throw new Error('Missing OPENAI_API_KEY');
+    openaiClient = new OpenAI({ apiKey });
+  }
+  return openaiClient;
+}
 
 export interface ExtractionResult {
   memories: ExtractedMemory[];
@@ -121,37 +131,29 @@ export async function extractMemories(
     userPrompt += `\n\nAlready known facts (do NOT re-extract these unless updated):\n${existingMemoryContext}`;
   }
 
-  const anthropic = getAnthropicClient();
+  const openai = getOpenAI();
 
   try {
-    const response = await withRetry(() =>
-      anthropic.messages.create({
-        model: LLM_CONFIG.MODEL,
-        system: EXTRACTION_SYSTEM_PROMPT,
-        messages: [
-          { role: 'user', content: userPrompt },
-        ],
-        max_tokens: 500,
-        temperature: 0.1, // low temperature for consistent extraction
-      })
-    );
+    const completion = await openai.chat.completions.create({
+      model: LLM_CONFIG.MODEL,
+      messages: [
+        { role: 'system', content: EXTRACTION_SYSTEM_PROMPT },
+        { role: 'user', content: userPrompt },
+      ],
+      max_tokens: 500,
+      temperature: 0.1, // low temperature for consistent extraction
+      response_format: { type: 'json_object' },
+    });
 
-    // Extract text from response
-    const responseText = response.content
-      .filter((block) => block.type === 'text')
-      .map((block) => ('text' in block ? block.text : ''))
-      .join('');
-
+    const responseText = completion.choices[0]?.message?.content || '[]';
     const tokensUsed =
-      (response.usage?.input_tokens || 0) +
-      (response.usage?.output_tokens || 0);
+      (completion.usage?.prompt_tokens || 0) +
+      (completion.usage?.completion_tokens || 0);
 
     // Parse response - handle both array and object-wrapped array
     let parsed: unknown;
     try {
-      // Strip any markdown fences Claude might add despite instructions
-      const cleaned = responseText.replace(/```(?:json)?\s*/g, '').replace(/```\s*/g, '').trim();
-      parsed = JSON.parse(cleaned);
+      parsed = JSON.parse(responseText);
       // If wrapped in object (e.g. {"memories": [...]}), unwrap
       if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
         const obj = parsed as Record<string, unknown>;
@@ -170,7 +172,7 @@ export async function extractMemories(
       durationMs: Date.now() - startTime,
     };
   } catch (error) {
-    console.error('[MemoryExtraction] Anthropic call failed:', error);
+    console.error('[MemoryExtraction] GPT call failed:', error);
     return { memories: [], tokensUsed: 0, durationMs: Date.now() - startTime };
   }
 }
