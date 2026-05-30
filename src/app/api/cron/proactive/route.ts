@@ -450,7 +450,11 @@ export async function GET(req: NextRequest) {
           title: character.name,
           body: pushBody,
           tag: `proactive-${conv.id}`,
-          url: `/chat/${character.slug}`,
+          // Deep link to the actual conversation (chat page resolves by
+          // conversationId, NOT character slug). Sending slug here caused the
+          // chat page lookup to fail -> fallback redirect to /select (the
+          // character intro carousel), forcing an extra tap.
+          url: `/chat/${conv.id}`,
         };
 
         const pushResult = await sendPushToUser(
