@@ -93,6 +93,33 @@ export async function POST(req: NextRequest) {
       })
       .eq('id', giftTxId);
 
+    // 5.5. A gift is the strongest intimacy signal. Bump the relationship on
+    // the conversation for this user+character so the next emotional peak
+    // (and any upgrade moment) reflects it. Non-fatal if it fails.
+    try {
+      const characterId = metadata.character_id;
+      if (characterId) {
+        const { data: conv } = await serviceClient
+          .from('conversations')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('character_id', characterId)
+          .single();
+
+        if (conv?.id) {
+          const giftPoints = Math.floor(Number(heartsGranted) / 10);
+          if (giftPoints > 0) {
+            await serviceClient.rpc('bump_intimacy', {
+              p_conversation_id: conv.id,
+              p_points: giftPoints,
+            });
+          }
+        }
+      }
+    } catch (intimacyErr) {
+      console.warn('[Webhook] Intimacy bump after gift failed (non-critical):', intimacyErr);
+    }
+
     console.log(
       `[Webhook] Gift completed: user=${userId} hearts=+${heartsGranted} balance=${newBalance} tx=${giftTxId}`
     );

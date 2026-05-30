@@ -17,6 +17,11 @@ import {
 import { extractMemories } from '@/lib/chat/memory-extraction';
 import { MEMORY_CONFIG } from '@/config/constants';
 import { parseGiftMarker } from '@/lib/chat/gift-parser';
+import {
+  computeTurnIntimacyPoints,
+  shouldShowUpgradePrompt,
+  suggestedTierForStage,
+} from '@/lib/chat/intimacy';
 import type { DbMessage, DbCharacter, DbSelfie } from '@/types';
 
 async function handler(req: NextRequest) {
@@ -283,6 +288,65 @@ async function handler(req: NextRequest) {
     .update({ total_messages_sent: (conversation.message_count || 0) + 1 })
     .eq('id', user.id);
 
+  // 12.5. Intimacy progression + in-chat upgrade prompt (hot-state monetization)
+  // Relationship must be BUILT before any upgrade moment appears. Points accrue
+  // slowly from ordinary turns; the prompt only surfaces on a stage-up at/above
+  // the monetizable stage, once per stage, and never to existing subscribers.
+  let upgradePrompt: { tier: 'deeper' | 'lover'; stage: number } | null = null;
+  try {
+    const turnPoints = computeTurnIntimacyPoints({ userMessage: content, isComeback });
+
+    const { data: bump } = await serviceClient.rpc('bump_intimacy', {
+      p_conversation_id: conversationId,
+      p_points: turnPoints,
+    });
+
+    if (bump && bump.found && aiResult.crisisSeverity === 'none') {
+      const subRes = await serviceClient.rpc('get_active_subscription', {
+        p_user_id: user.id,
+      });
+      const hasActiveSubscription = Boolean(subRes.data?.active);
+
+      const show = shouldShowUpgradePrompt({
+        stagedUp: Boolean(bump.staged_up),
+        stage: Number(bump.stage),
+        lastPromptStage: conversation.last_upgrade_prompt_stage ?? -1,
+        lastPromptAt: conversation.last_upgrade_prompt_at ?? null,
+        hasActiveSubscription,
+      });
+
+      if (show) {
+        const stage = Number(bump.stage);
+        const tier = suggestedTierForStage(stage);
+        upgradePrompt = { tier, stage };
+
+        // Re-arm only on the next stage-up: record we prompted at this stage.
+        await serviceClient
+          .from('conversations')
+          .update({
+            last_upgrade_prompt_stage: stage,
+            last_upgrade_prompt_at: new Date().toISOString(),
+          })
+          .eq('id', conversationId);
+
+        // Audit the intent surface (no payment yet — funnel/compliance log).
+        await serviceClient.from('payment_intent_log').insert({
+          user_id: user.id,
+          kind: 'subscription',
+          ref_slug: tier,
+          amount_usd: 0,
+          surface: 'upgrade_prompt',
+          guard_result: 'allowed',
+          intimacy_stage: stage,
+          character_id: character.id,
+        });
+      }
+    }
+  } catch (err) {
+    // Non-critical: chat already succeeded. Never block the reply on this.
+    console.warn('[Chat] Intimacy/upgrade step failed (non-critical):', err);
+  }
+
   // 13. Memory extraction (runs AFTER response is sent).
   // NOTE: Vercel freezes the function once the response returns, killing any
   // un-awaited "fire-and-forget" task. after() keeps the runtime alive so the
@@ -337,6 +401,7 @@ async function handler(req: NextRequest) {
     selfie: selfieData,
     hearts_remaining: heartsRemaining,
     gift_request: giftMarker ? giftMarker.giftSlug : null,
+    upgrade_prompt: upgradePrompt,
   });
 }
 

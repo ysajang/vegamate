@@ -34,6 +34,41 @@ export const GIFT_REQUEST_CONFIG = {
   MIN_HOURS_BETWEEN: 2,
 } as const;
 
+// ── Intimacy progression ────────────────────────────────────
+// Hot-state monetization: relationship must be BUILT before an upgrade prompt
+// appears, or it breaks the illusion and kills conversion. Points accrue slowly
+// from ordinary turns, faster from meaningful interactions / gifts.
+//
+// Stage thresholds (must mirror intimacy_stage_for_score() in migration 009):
+//   0 stranger 0..29 / 1 acquaintance 30..79 / 2 close 80..179
+//   3 trusted 180..349 / 4 devoted 350+
+export const INTIMACY_CONFIG = {
+  /** Ordinary user turn. Low on purpose: ~30 turns to even leave "stranger". */
+  POINTS_PER_TURN: 1,
+  /** Bonus when the user writes a substantive message (>= this many chars). */
+  LONG_MESSAGE_CHARS: 40,
+  POINTS_LONG_MESSAGE_BONUS: 1,
+  /** Bonus for returning after a gap (re-engagement signals real attachment). */
+  POINTS_COMEBACK_BONUS: 3,
+  /** Gift contribution = floor(hearts_value / this). Gifts are a strong signal. */
+  GIFT_DIVISOR: 10,
+  /**
+   * Lowest stage at which an in-chat upgrade prompt may EVER appear.
+   * stage 0/1 never see it — the relationship isn't real yet.
+   */
+  UPGRADE_MIN_STAGE: 2,
+  /** Cooldown after a prompt is dismissed before any re-prompt (ms). */
+  UPGRADE_DISMISS_COOLDOWN_MS: 1000 * 60 * 60 * 24 * 3, // 3 days
+} as const;
+
+export const INTIMACY_STAGE_LABELS: Record<number, string> = {
+  0: 'stranger',
+  1: 'acquaintance',
+  2: 'close',
+  3: 'trusted',
+  4: 'devoted',
+};
+
 // ── Selfie rarity system ────────────────────────────────────
 export const RARITY_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'] as const;
 export type SelfieRarity = (typeof RARITY_ORDER)[number];
