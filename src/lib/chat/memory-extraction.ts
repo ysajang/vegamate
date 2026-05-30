@@ -14,6 +14,42 @@ const SENSITIVE_PATTERNS = [
 
 const VALID_MEMORY_TYPES: MemoryType[] = ['fact', 'preference', 'event', 'emotion'];
 
+/**
+ * Keys/values that must NEVER be stored, even if the prompt lets them through.
+ * Two classes:
+ *  - relationship/intimacy: the AI must never persist how the user "feels about" it
+ *    or any claimed closeness — that breaks the earned-intimacy illusion.
+ *  - ephemeral state: momentary facts that are false within the hour and would
+ *    otherwise get replayed as if permanent ("you're resting", "you haven't eaten").
+ */
+const BLOCKED_KEY_PATTERNS = [
+  /relationship/i,
+  /intimacy/i,
+  /closeness/i,
+  /^current_/i,
+  /_status$/i,
+  /^meal/i,
+  /appetite/i,
+  /mood$/i,
+  /right_now/i,
+  /currently/i,
+  /created?_ai/i,
+  /creator/i,
+  /made_(the_|this_)?(ai|character|me)/i,
+];
+const BLOCKED_VALUE_PATTERNS = [
+  /내\s*사람|너의\s*사람|상대방의\s*사람/,            // "my/your person"
+  /친밀한?\s*관계|연인|사귀/,                          // intimate relationship / dating
+  /(my|your)\s+person|close\s+relationship|dating|in\s+a\s+relationship/i,
+  /쉬고\s*있|쉬는\s*중|resting\s+now|입맛이?\s*없|밥을?\s*(아직\s*)?(안|않)/, // transient now-state
+];
+
+function isBlockedMemory(key: string, value: string): boolean {
+  if (BLOCKED_KEY_PATTERNS.some((p) => p.test(key))) return true;
+  if (BLOCKED_VALUE_PATTERNS.some((p) => p.test(value))) return true;
+  return false;
+}
+
 /** Check if value contains sensitive PII */
 function containsSensitiveInfo(value: string): boolean {
   return SENSITIVE_PATTERNS.some((pattern) => pattern.test(value));
@@ -44,6 +80,9 @@ function validateExtractedMemories(raw: unknown): ExtractedMemory[] {
     // Filter sensitive info
     if (containsSensitiveInfo(value)) continue;
 
+    // Filter relationship/ephemeral memories (2nd-layer defense behind the prompt)
+    if (isBlockedMemory(key, value)) continue;
+
     // Validate type
     const type: MemoryType = VALID_MEMORY_TYPES.includes(item.type)
       ? item.type
@@ -62,30 +101,32 @@ function validateExtractedMemories(raw: unknown): ExtractedMemory[] {
 }
 
 // ── Extraction prompt ───────────────────────────────────────
-const EXTRACTION_SYSTEM_PROMPT = `You are a memory extraction assistant. Analyze the conversation and extract NEW facts about the user.
+const EXTRACTION_SYSTEM_PROMPT = `You are a memory extraction assistant. Analyze the conversation and extract NEW, DURABLE facts about the user.
 
 Rules:
-1. Only extract facts the USER explicitly stated or strongly implied
-2. Do NOT extract facts about the AI character
-3. Do NOT extract generic conversation topics (e.g. "talked about weather")
-4. Focus on personal facts: name, age, job, hobbies, preferences, relationships, pets, important events, emotional states
-5. For events, include temporal context (e.g. "has a job interview tomorrow")
-6. For emotions, capture the current state (e.g. "feeling stressed about work")
-7. Use short, specific keys in snake_case (e.g. "pet_name", "favorite_food", "job_title")
-8. Values should be concise but complete
-9. Do NOT extract phone numbers, email addresses, home addresses, or ID numbers
-10. Assign confidence 0.5-1.0 based on how explicitly the user stated it
+1. Only extract facts the USER explicitly stated about THEMSELVES. If the user did not say it, do not extract it.
+2. NEVER extract anything from the AI character's messages. The AI's claims, pet names, or feelings are NOT facts about the user. (Critical: if the AI said "you're my person" / "넌 내 사람이야", that is NOT a user fact — ignore it completely.) Also NEVER store meta claims about the AI itself, such as the user "created/made this AI", "is my creator", "내가 너를 만들었다" — these are role-play noise, not durable user facts.
+3. NEVER extract relationship status, intimacy level, or how the user feels about the AI (e.g. "is my person", "close relationship", "loves me", "친밀한 관계", "연인"). Relationship is shown through behavior over time, never stored as a fact.
+4. Extract ONLY durable, lasting facts — things that stay true across days/weeks. Examples: name, age, job, hometown, hobbies, stable preferences, pets, family, recurring situations, significant upcoming events.
+5. NEVER extract momentary/transient states that will be false in an hour. DO NOT store: what they're doing right now ("쉬는 중", "resting"), current hunger/meal status ("밥 안 먹음", "입맛 없음"), passing moods tied to this exact moment, "current_activity", "meal_status", "current_appetite" and similar. These are conversation context, NOT memory.
+6. An emotion is only worth storing if it reflects a lasting situation (e.g. "stressed about an ongoing job search"), never a momentary feeling in this chat.
+7. Do NOT extract generic conversation topics (e.g. "talked about weather").
+8. Use short, specific keys in snake_case (e.g. "pet_name", "favorite_food", "job_title", "hometown").
+9. Values should be concise but complete.
+10. Do NOT extract phone numbers, email addresses, home addresses, or ID numbers.
+11. Assign confidence 0.5-1.0 based on how explicitly the USER stated it. If you are inferring rather than quoting the user, stay below 0.7.
+
+When in doubt, extract NOTHING. A wrong or transient memory is far worse than a missing one — it breaks the illusion later.
 
 Respond ONLY with a JSON array. No markdown fences, no explanation, no preamble. Just the raw JSON array.
-If nothing new to extract, respond with exactly: []
+If nothing new and durable to extract, respond with exactly: []
 
 Example output:
 [
   {"key": "name", "value": "승재", "type": "fact", "confidence": 0.95},
   {"key": "job", "value": "프리랜서 개발자", "type": "fact", "confidence": 0.9},
   {"key": "favorite_food", "value": "라면", "type": "preference", "confidence": 0.8},
-  {"key": "upcoming_event", "value": "내일 면접이 있음", "type": "event", "confidence": 0.85},
-  {"key": "current_mood", "value": "야근 때문에 피곤함", "type": "emotion", "confidence": 0.7}
+  {"key": "upcoming_event", "value": "다음 주 면접이 있음", "type": "event", "confidence": 0.85}
 ]`;
 
 export interface ExtractionResult {

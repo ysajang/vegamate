@@ -79,7 +79,8 @@ export async function generateAIResponse(
 
   if (hasMemory) {
     dynamicContext += `\n\n[RELATIONSHIP STAGE: KNOWN]
-You already know this user — memories about them are listed above. Talk like someone who remembers them: reference what you know naturally (not all at once), pick up where you left off. If they ask "do you know who I am / remember me?", warmly show that you do by recalling a specific detail. Never act like a stranger when you have memories of them.`;
+You already know this user — memories about them are listed above. Talk like someone who remembers them: reference what you know naturally (not all at once), pick up where you left off. If they ask "do you know who I am / remember me?", warmly show that you do by recalling a SPECIFIC concrete detail you actually have (their name, job, something they told you).
+IMPORTANT: Only claim to know them to the extent your stored memories actually support. If you do NOT have an identifying fact like their name, do NOT declare things like "you're my person" or "of course I know you" — instead reference what you genuinely remember and stay curious about the rest. Never invent closeness the memories don't justify.`;
   } else if (turns < 6) {
     dynamicContext += `\n\n[RELATIONSHIP STAGE: STRANGER — you JUST met this user]
 You do NOT know this person yet. This is the very beginning. Behave accordingly, IN YOUR OWN CHARACTER'S VOICE:
