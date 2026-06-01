@@ -46,6 +46,8 @@ export default function ChatPage({ params }: ChatPageProps) {
     isLoadingMore,
     loadMore,
     sendMessage,
+    editMessage,
+    deleteMessage,
     clearExhaustion,
   } = useChat({ conversationId });
 
@@ -263,6 +265,8 @@ export default function ChatPage({ params }: ChatPageProps) {
                   accentColor={accentColor}
                   giftSlug={showGiftButton ? lastGiftRequest : null}
                   characterId={character.id}
+                  onEditMessage={editMessage}
+                  onDeleteMessage={deleteMessage}
                 />
               );
             })}

@@ -26,6 +26,8 @@ interface UseChatReturn {
   /** Fetch the next older page; returns the number of messages prepended */
   loadMore: () => Promise<number>;
   sendMessage: (content: string) => Promise<void>;
+  editMessage: (messageId: string, newContent: string) => Promise<void>;
+  deleteMessage: (messageId: string) => Promise<void>;
   clearExhaustion: () => void;
 }
 
@@ -191,6 +193,26 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
           });
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          const updated = payload.new as DbMessage;
+          setMessages((prev) => {
+            // Soft-deleted elsewhere → drop it from the view
+            if (updated.deleted_at) {
+              return prev.filter((m) => m.id !== updated.id);
+            }
+            // Edited elsewhere → replace in place
+            return prev.map((m) => (m.id === updated.id ? { ...m, ...updated } : m));
+          });
+        }
+      )
       .subscribe();
 
     return () => {
@@ -304,6 +326,69 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
     [conversationId, isSending]
   );
 
+  // Edit a user message's content (optimistic, reverts on failure).
+  const editMessage = useCallback(
+    async (messageId: string, newContent: string) => {
+      const trimmed = newContent.trim();
+      if (!trimmed || messageId.startsWith('optimistic-')) return;
+
+      const snapshot = messagesRef.current;
+      const nowIso = new Date().toISOString();
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId ? { ...m, content: trimmed, edited_at: nowIso } : m
+        )
+      );
+
+      try {
+        const res = await fetch(`/api/messages/${messageId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: trimmed }),
+        });
+        const json = await res.json();
+        if (!json.success) throw new Error(json.error || 'edit failed');
+        setMessages((prev) =>
+          prev.map((m) => (m.id === messageId ? { ...m, ...json.data.message } : m))
+        );
+      } catch {
+        setMessages(snapshot);
+        setError('메시지 수정에 실패했어요');
+      }
+    },
+    []
+  );
+
+  // Soft-delete a user message + its paired AI reply (optimistic, reverts on failure).
+  const deleteMessage = useCallback(async (messageId: string) => {
+    if (messageId.startsWith('optimistic-')) return;
+
+    const snapshot = messagesRef.current;
+    const idx = snapshot.findIndex((m) => m.id === messageId);
+    if (idx < 0 || snapshot[idx].role !== 'user') return;
+
+    // Mirror server logic: remove the user message + assistant replies up to
+    // the next user message.
+    const removeIds = new Set<string>([messageId]);
+    for (let i = idx + 1; i < snapshot.length; i++) {
+      if (snapshot[i].role === 'user') break;
+      if (snapshot[i].role === 'assistant') removeIds.add(snapshot[i].id);
+    }
+
+    setMessages((prev) => prev.filter((m) => !removeIds.has(m.id)));
+
+    try {
+      const res = await fetch(`/api/messages/${messageId}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || 'delete failed');
+      const ids = new Set<string>(json.data.deleted_ids || []);
+      setMessages((prev) => prev.filter((m) => !ids.has(m.id)));
+    } catch {
+      setMessages(snapshot);
+      setError('메시지 삭제에 실패했어요');
+    }
+  }, []);
+
   const clearExhaustion = useCallback(() => {
     setHeartsExhausted(false);
     setExhaustionMessage(null);
@@ -363,6 +448,8 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
     isLoadingMore,
     loadMore,
     sendMessage,
+    editMessage,
+    deleteMessage,
     clearExhaustion,
   };
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import Image from 'next/image';
 import { CharacterAvatar } from '@/components/common';
 import type { DbMessage, DbSelfie, SelfieRarity } from '@/types';
@@ -113,6 +113,10 @@ interface MessageBubbleProps {
   giftSlug?: string | null;
   /** Character ID for gift purchase */
   characterId?: string;
+  /** Edit handler — when provided, the message becomes editable (user messages) */
+  onEditMessage?: (messageId: string, newContent: string) => void;
+  /** Delete handler — when provided, the message becomes deletable */
+  onDeleteMessage?: (messageId: string) => void;
 }
 
 export function MessageBubble({
@@ -122,9 +126,55 @@ export function MessageBubble({
   accentColor = 'var(--vm-rose)',
   giftSlug,
   characterId,
+  onEditMessage,
+  onDeleteMessage,
 }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const selfie = message.selfie;
+
+  // Editable only when handlers are provided and it's a real (persisted) message.
+  const canModify =
+    isUser &&
+    !!onEditMessage &&
+    !!onDeleteMessage &&
+    !message.id.startsWith('optimistic-') &&
+    !message.is_proactive;
+
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(message.content);
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const openSheet = () => {
+    if (!canModify) return;
+    setConfirmingDelete(false);
+    setSheetOpen(true);
+  };
+  const startPress = () => {
+    if (!canModify) return;
+    pressTimer.current = setTimeout(openSheet, 450);
+  };
+  const cancelPress = () => {
+    if (pressTimer.current) clearTimeout(pressTimer.current);
+  };
+
+  const beginEdit = () => {
+    setDraft(message.content);
+    setEditing(true);
+    setSheetOpen(false);
+  };
+  const saveEdit = () => {
+    const trimmed = draft.trim();
+    if (trimmed && trimmed !== message.content) {
+      onEditMessage?.(message.id, trimmed);
+    }
+    setEditing(false);
+  };
+  const confirmDelete = () => {
+    onDeleteMessage?.(message.id);
+    setSheetOpen(false);
+  };
 
   // Time formatting
   const time = new Date(message.created_at).toLocaleTimeString([], {
@@ -147,20 +197,69 @@ export function MessageBubble({
       )}
 
       <div className="flex max-w-[78%] flex-col gap-1">
-        {/* Text bubble */}
-        {message.content && (
-          <div
-            className={isUser ? 'vm-bubble-user' : 'vm-bubble-ai'}
-            style={{
-              padding: '10px 16px',
-              color: isUser ? '#FFF' : 'var(--vm-text-primary)',
-              fontSize: 15,
-              lineHeight: 1.5,
-              letterSpacing: '-0.01em',
-            }}
-          >
-            <p className="whitespace-pre-wrap">{message.content}</p>
+        {/* Text bubble (or inline editor) */}
+        {editing ? (
+          <div className="flex flex-col gap-2">
+            <textarea
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              rows={Math.min(6, Math.max(1, draft.split('\n').length))}
+              className="vm-bubble-user w-full resize-none outline-none"
+              style={{
+                padding: '10px 16px',
+                color: '#FFF',
+                fontSize: 15,
+                lineHeight: 1.5,
+                background: 'var(--vm-purple-soft)',
+              }}
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                className="rounded-full px-3 py-1 text-[12px]"
+                style={{ color: 'var(--vm-text-tertiary)', background: 'var(--vm-glass)' }}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={saveEdit}
+                className="rounded-full px-3 py-1 text-[12px] font-medium"
+                style={{ color: '#FFF', background: accentColor }}
+              >
+                저장
+              </button>
+            </div>
           </div>
+        ) : (
+          message.content && (
+            <div
+              className={isUser ? 'vm-bubble-user' : 'vm-bubble-ai'}
+              style={{
+                padding: '10px 16px',
+                color: isUser ? '#FFF' : 'var(--vm-text-primary)',
+                fontSize: 15,
+                lineHeight: 1.5,
+                letterSpacing: '-0.01em',
+                cursor: canModify ? 'pointer' : 'default',
+              }}
+              onTouchStart={startPress}
+              onTouchEnd={cancelPress}
+              onTouchMove={cancelPress}
+              onContextMenu={
+                canModify
+                  ? (e) => {
+                      e.preventDefault();
+                      openSheet();
+                    }
+                  : undefined
+              }
+            >
+              <p className="whitespace-pre-wrap">{message.content}</p>
+            </div>
+          )
         )}
 
         {/* Inline gift button — shown when character requests a gift */}
@@ -173,7 +272,7 @@ export function MessageBubble({
           <SelfieInline selfie={selfie} />
         )}
 
-        {/* Time + read indicator */}
+        {/* Time + edited + read indicator */}
         <div
           className={`flex items-center gap-1.5 ${isUser ? 'justify-end pr-0.5' : 'justify-start pl-0.5'}`}
         >
@@ -183,6 +282,11 @@ export function MessageBubble({
           >
             {time}
           </span>
+          {message.edited_at && (
+            <span className="text-[11px]" style={{ color: 'var(--vm-text-tertiary)' }}>
+              · 수정됨
+            </span>
+          )}
           {isUser && (
             <span
               className="text-[11px]"
@@ -193,6 +297,81 @@ export function MessageBubble({
           )}
         </div>
       </div>
+
+      {/* Action sheet (long-press / right-click on own message) */}
+      {sheetOpen && (
+        <div
+          className="vm-animate-fade-in fixed inset-0 z-50 flex items-end justify-center"
+          style={{ background: 'rgba(0,0,0,0.45)' }}
+          onClick={() => setSheetOpen(false)}
+        >
+          <div
+            className="vm-animate-fade-in-up mb-6 w-[calc(100%-32px)] max-w-sm overflow-hidden rounded-2xl"
+            style={{
+              background: 'var(--vm-card)',
+              border: '0.5px solid var(--vm-glass-border)',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {!confirmingDelete ? (
+              <>
+                <button
+                  type="button"
+                  onClick={beginEdit}
+                  className="block w-full px-5 py-4 text-left text-[15px]"
+                  style={{
+                    color: 'var(--vm-text-primary)',
+                    borderBottom: '0.5px solid var(--vm-glass-border)',
+                  }}
+                >
+                  ✏️ 수정
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmingDelete(true)}
+                  className="block w-full px-5 py-4 text-left text-[15px]"
+                  style={{ color: '#ff6b6b' }}
+                >
+                  🗑️ 삭제
+                </button>
+              </>
+            ) : (
+              <>
+                <div
+                  className="px-5 py-4 text-[14px]"
+                  style={{
+                    color: 'var(--vm-text-secondary)',
+                    borderBottom: '0.5px solid var(--vm-glass-border)',
+                  }}
+                >
+                  이 메시지와 그에 대한 답장을 삭제할까요? 되돌릴 수 없어요.
+                </div>
+                <button
+                  type="button"
+                  onClick={confirmDelete}
+                  className="block w-full px-5 py-4 text-left text-[15px] font-medium"
+                  style={{ color: '#ff6b6b' }}
+                >
+                  삭제하기
+                </button>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => setSheetOpen(false)}
+              className="block w-full px-5 py-4 text-center text-[15px]"
+              style={{
+                color: 'var(--vm-text-tertiary)',
+                borderTop: '0.5px solid var(--vm-glass-border)',
+              }}
+            >
+              취소
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
