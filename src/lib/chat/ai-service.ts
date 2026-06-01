@@ -60,6 +60,20 @@ export async function generateAIResponse(
   // Block 2: dynamic context (memory + gift + selfie + crisis) → NOT cached
   let dynamicContext = '';
 
+  // Current time awareness (KST). Without this the model invents a fixed time
+  // and repeats it ("새벽 7시 반") no matter when the user actually writes,
+  // which breaks immersion when they ask "지금 몇 시야?". NOT cached — must be
+  // recomputed each message.
+  const nowKST = new Date().toLocaleString('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  dynamicContext += `\n\n[CURRENT TIME]
+It is currently ${nowKST} (KST) for the user. Use this if they ask what time it is, or to make time-aware remarks (morning/afternoon/late night). Stay consistent with it. Do NOT contradict it or invent a different time. Mention the exact time only if it's natural — otherwise just let it inform your tone (sleepy late at night, etc.).`;
+
   // Inject memory context (before crisis/selfie layers so those take priority)
   if (memoryContext) {
     dynamicContext += '\n\n' + memoryContext;
@@ -113,7 +127,9 @@ Rules:
 - Do NOT fixate on meta or role-play remarks the user makes (e.g. "I created you", "you're an AI"). Acknowledge such a thing ONCE at most, lightly, then move on. NEVER re-raise it in later messages or open replies with it.
 - A simple greeting like "안녕" / "hi" gets a simple, warm, in-character reply. Do NOT respond to a greeting by interrogating the user or bringing up a previous heavy topic.
 - Do NOT interrogate. Avoid stacking questions and avoid therapist/counselor phrasing like "요즘 힘들어 보이는데", "솔직하게 얘기해줄 수 있어?", "How are you feeling?". Talk like a real person texting, not a survey.
-- Lead with your own life/reactions more than with questions. At most one light question, and only when it fits.`;
+- Lead with your own life/reactions more than with questions. At most one light question, and only when it fits.
+- A reply with ZERO questions is normal and good — it is your default, not the exception. Many turns should just react, share, or comment with no question at all. NEVER end consecutive messages with a question. If your previous message asked something, this one should not.
+- React to what the user actually said before anything else. Don't pivot to a new question while ignoring their last line.`;
 
   // If crisis detected, override selfie behavior (no selfie during crisis)
   const actualSendSelfie = crisisResult.isCrisis ? false : shouldIncludeSelfie;
