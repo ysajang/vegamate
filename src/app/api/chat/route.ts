@@ -132,6 +132,7 @@ async function handler(req: NextRequest) {
     .from('messages')
     .select('*')
     .eq('conversation_id', conversationId)
+    .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .limit(30);
 

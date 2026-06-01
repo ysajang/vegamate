@@ -98,6 +98,12 @@ export interface DbMessage {
   is_proactive: boolean;
   metadata: MessageMetadata | null;
   created_at: string;
+  /** Soft-delete timestamp (null = active). Hidden from UI/AI when set. */
+  deleted_at?: string | null;
+  /** Last edit timestamp for user messages (null = never edited). */
+  edited_at?: string | null;
+  /** Append-only prior versions for audit. */
+  edit_history?: { content: string; edited_at: string }[];
   /** Joined data */
   selfie?: DbSelfie;
 }
