@@ -9,6 +9,7 @@ import { ChatInput } from '@/components/chat/chat-input';
 import { ChatHeader } from '@/components/chat/chat-header';
 import { CharacterAvatar, TypingIndicator } from '@/components/common';
 import { GiftSheet } from '@/components/chat/gift-sheet';
+import { UpgradePrompt } from '@/components/chat/upgrade-prompt';
 import { HeartClaimPopup } from '@/components/chat/heart-claim-popup';
 import type { DbCharacter } from '@/types';
 
@@ -42,6 +43,8 @@ export default function ChatPage({ params }: ChatPageProps) {
     heartsExhausted,
     exhaustionMessage,
     lastGiftRequest,
+    upgradePrompt,
+    dismissUpgradePrompt,
     hasMore,
     isLoadingMore,
     loadMore,
@@ -270,6 +273,25 @@ export default function ChatPage({ params }: ChatPageProps) {
                 />
               );
             })}
+
+            {/* In-chat upgrade prompt (emotional peak) — stays in the
+                conversation, never bounces to a separate store page */}
+            {upgradePrompt && !isSending && (
+              <div className="flex items-end gap-2.5">
+                <CharacterAvatar
+                  src={character.avatar_url}
+                  name={character.name}
+                  size={32}
+                  accentColor={accentColor}
+                />
+                <UpgradePrompt
+                  tierSlug={upgradePrompt.tier}
+                  characterId={character.id}
+                  characterName={character.name}
+                  onDismiss={dismissUpgradePrompt}
+                />
+              </div>
+            )}
 
             {/* Typing indicator */}
             {isSending && (

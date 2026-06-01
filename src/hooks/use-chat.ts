@@ -19,6 +19,10 @@ interface UseChatReturn {
   exhaustionMessage: string | null;
   /** Gift slug the character is requesting (inline button) */
   lastGiftRequest: string | null;
+  /** In-chat subscription upgrade prompt surfaced at an emotional peak */
+  upgradePrompt: { tier: 'deeper' | 'lover'; stage: number } | null;
+  /** Dismiss the current upgrade prompt */
+  dismissUpgradePrompt: () => void;
   /** Whether older messages exist to load (infinite scroll) */
   hasMore: boolean;
   /** Whether an older page is currently being fetched */
@@ -42,6 +46,7 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
   const [heartsExhausted, setHeartsExhausted] = useState(false);
   const [exhaustionMessage, setExhaustionMessage] = useState<string | null>(null);
   const [lastGiftRequest, setLastGiftRequest] = useState<string | null>(null);
+  const [upgradePrompt, setUpgradePrompt] = useState<{ tier: 'deeper' | 'lover'; stage: number } | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const supabaseRef = useRef(createClient());
@@ -228,6 +233,7 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
       setIsSending(true);
       setError(null);
       setLastGiftRequest(null);
+      setUpgradePrompt(null);
 
       // Optimistic update for user message
       const optimisticMsg: DbMessage = {
@@ -311,6 +317,11 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
           // Check for gift request
           if (json.data.gift_request) {
             setLastGiftRequest(json.data.gift_request);
+          }
+
+          // Check for in-chat upgrade prompt (emotional peak)
+          if (json.data.upgrade_prompt) {
+            setUpgradePrompt(json.data.upgrade_prompt);
           }
         } else {
           setMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
@@ -447,6 +458,8 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
     heartsExhausted,
     exhaustionMessage,
     lastGiftRequest,
+    upgradePrompt,
+    dismissUpgradePrompt: () => setUpgradePrompt(null),
     hasMore,
     isLoadingMore,
     loadMore,
