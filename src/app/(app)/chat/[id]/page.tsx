@@ -56,9 +56,24 @@ export default function ChatPage({ params }: ChatPageProps) {
 
   // Load conversation data to get character info
   useEffect(() => {
-    async function loadConversation() {
+    let cancelled = false;
+
+    // Notification deep-links land here. If we redirect to /select on the first
+    // transient hiccup (auth session not yet attached, brief network error, or
+    // a just-created conversation not yet in the list), the user gets bounced
+    // to the character carousel. So we retry a couple of times and only fall
+    // back to /select when the conversation is genuinely absent.
+    async function loadConversation(attempt = 0): Promise<void> {
+      const MAX_ATTEMPTS = 3;
       try {
         const res = await fetch('/api/conversations');
+
+        // Not signed in -> go to login, not /select.
+        if (res.status === 401) {
+          if (!cancelled) router.replace('/login');
+          return;
+        }
+
         const json = await res.json();
 
         if (json.success) {
@@ -66,21 +81,49 @@ export default function ChatPage({ params }: ChatPageProps) {
             (c: { id: string }) => c.id === conversationId
           );
           if (conv?.character) {
-            setCharacter(conv.character as DbCharacter);
-          } else {
-            router.push('/select');
+            if (!cancelled) {
+              setCharacter(conv.character as DbCharacter);
+              setPageLoading(false);
+            }
             return;
           }
+
+          // Conversation not found yet. It may be propagation lag for a freshly
+          // created conversation -> retry before giving up.
+          if (attempt < MAX_ATTEMPTS - 1) {
+            await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+            if (!cancelled) return loadConversation(attempt + 1);
+            return;
+          }
+
+          // Genuinely not in the user's list -> safe to send to /select.
+          if (!cancelled) router.replace('/select');
+          return;
+        }
+
+        // Non-success payload (server error etc.) -> retry, don't bounce.
+        if (attempt < MAX_ATTEMPTS - 1) {
+          await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+          if (!cancelled) return loadConversation(attempt + 1);
+        } else if (!cancelled) {
+          setPageLoading(false);
         }
       } catch {
-        router.push('/select');
-        return;
-      } finally {
-        setPageLoading(false);
+        // Network error -> retry instead of redirecting away.
+        if (attempt < MAX_ATTEMPTS - 1) {
+          await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+          if (!cancelled) return loadConversation(attempt + 1);
+        } else if (!cancelled) {
+          setPageLoading(false);
+        }
       }
     }
 
     loadConversation();
+
+    return () => {
+      cancelled = true;
+    };
   }, [conversationId, router]);
 
   // Distance from the bottom (px) within which we consider the view "pinned".

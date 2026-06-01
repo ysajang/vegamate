@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 
 const SW_PATH = '/sw.js';
 const SW_REGISTER_TIMEOUT = 5000; // 5 seconds
@@ -10,12 +11,16 @@ const SW_REGISTER_TIMEOUT = 5000; // 5 seconds
  * 1. Service worker registration
  * 2. Push notification permission + subscription registration
  * 3. Timezone detection and sync to profile
+ * 4. SW -> app navigation messages (notification clicks do SPA routing,
+ *    avoiding a full reload that would race the auth session and bounce
+ *    the user to /select).
  *
  * Call once in the authenticated app layout.
  * Runs only on mount. Safe to call multiple times (idempotent).
  */
 export function usePushAndTimezone() {
   const initialized = useRef(false);
+  const router = useRouter();
 
   useEffect(() => {
     if (initialized.current) return;
@@ -25,6 +30,25 @@ export function usePushAndTimezone() {
     syncTimezone().catch(() => {});
     initPush().catch(() => {});
   }, []);
+
+  // Listen for navigation requests posted by the service worker on
+  // notification click. Using router.push keeps it client-side (no reload),
+  // so the chat page mounts with the auth session already in place.
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+
+    const handler = (event: MessageEvent) => {
+      const data = event.data;
+      if (data && data.type === 'navigate' && typeof data.url === 'string') {
+        router.push(data.url);
+      }
+    };
+
+    navigator.serviceWorker.addEventListener('message', handler);
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', handler);
+    };
+  }, [router]);
 }
 
 /**

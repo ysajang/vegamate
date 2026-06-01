@@ -62,24 +62,48 @@ self.addEventListener('push', (event) => {
   }
 });
 
-// Handle notification click
+// Handle notification click -> open app to the right page
+//
+// Bug history: previously used client.navigate(url) on an existing tab. That
+// triggers a full document load (not Next.js client-side routing). On the chat
+// page the conversation lookup then runs before the auth session is ready and
+// redirects the user to /select. This file (src/sw.ts) is the real source —
+// @serwist/next compiles it to public/sw.js at build time, so editing
+// public/sw.js directly is always overwritten on the next build (which is why
+// earlier fixes appeared to do nothing).
+//
+// Fix:
+//   1. Focus an existing same-origin tab and ask the app to SPA-navigate via
+//      postMessage (the app listens and calls router.push) -> no reload, no race.
+//   2. If no tab is open, openWindow(url) and await it.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
-  const url = event.notification.data?.url || '/';
+  const targetUrl = (event.notification.data?.url as string | undefined) || '/';
+  const absoluteUrl = new URL(targetUrl, self.location.origin).href;
+
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // Focus existing window if available
-      for (const client of clientList) {
-        if (client.url.includes(self.location.origin) && 'focus' in client) {
-          client.focus();
-          client.navigate(url);
-          return;
-        }
+    (async () => {
+      const clientList = await self.clients.matchAll({
+        type: 'window',
+        includeUncontrolled: true,
+      });
+
+      const existing = clientList.find(
+        (c) => c.url.startsWith(self.location.origin) && 'focus' in c
+      );
+
+      if (existing) {
+        await existing.focus();
+        existing.postMessage({ type: 'navigate', url: targetUrl });
+        return;
       }
-      // Open new window
-      return self.clients.openWindow(url);
-    })
+
+      const opened = await self.clients.openWindow(absoluteUrl);
+      if (opened && 'focus' in opened) {
+        await opened.focus();
+      }
+    })()
   );
 });
 
