@@ -94,6 +94,188 @@ function StepName({
   );
 }
 
+// ── Step: Age Gate (생년월일 인증) ──────────────────────────
+// KR 만 19세 이상만 진입 가능. 서버가 만 나이를 재계산하므로
+// 여기서의 클라 검증은 UX(즉시 피드백)일 뿐, 권위는 서버에 있다.
+function StepAge({
+  onVerified,
+  onMinor,
+}: {
+  onVerified: () => void;
+  onMinor: () => void;
+}) {
+  const [year, setYear] = useState('');
+  const [month, setMonth] = useState('');
+  const [day, setDay] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const canProceed =
+    year.length === 4 && month.length >= 1 && day.length >= 1 && !submitting;
+
+  async function handleSubmit() {
+    if (!canProceed) return;
+    setError(null);
+
+    const y = Number(year);
+    const m = Number(month);
+    const d = Number(day);
+
+    // Light client-side sanity (server re-validates authoritatively).
+    if (!Number.isInteger(y) || !Number.isInteger(m) || !Number.isInteger(d)) {
+      setError('숫자만 입력해 주세요.');
+      return;
+    }
+    if (m < 1 || m > 12 || d < 1 || d > 31) {
+      setError('생년월일을 다시 확인해 주세요.');
+      return;
+    }
+
+    const birthDate = `${y.toString().padStart(4, '0')}-${m
+      .toString()
+      .padStart(2, '0')}-${d.toString().padStart(2, '0')}`;
+
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/profile/age', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ birth_date: birthDate }),
+      });
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        setError(json.error || '연령 인증에 실패했어요. 다시 시도해 주세요.');
+        setSubmitting(false);
+        return;
+      }
+
+      if (json.data?.age_verified_adult) {
+        onVerified();
+      } else {
+        onMinor();
+      }
+    } catch {
+      setError('네트워크 오류예요. 다시 시도해 주세요.');
+      setSubmitting(false);
+    }
+  }
+
+  const inputStyle = {
+    color: 'var(--vm-text-primary)',
+    borderBottom: '2px solid rgba(255,255,255,0.1)',
+    letterSpacing: '-0.01em',
+  } as const;
+
+  return (
+    <div className="vm-animate-fade-in-up flex flex-1 flex-col justify-center gap-8 px-8">
+      <div className="text-center">
+        <h1
+          className="text-[26px] font-bold"
+          style={{ color: 'var(--vm-text-primary)', letterSpacing: '-0.02em' }}
+        >
+          생년월일을 알려주세요
+        </h1>
+        <p className="mt-3 text-[15px]" style={{ color: 'var(--vm-text-tertiary)' }}>
+          만 19세 이상만 이용할 수 있어요
+        </p>
+      </div>
+
+      <div className="flex items-end justify-center gap-3">
+        <input
+          type="text"
+          inputMode="numeric"
+          value={year}
+          onChange={(e) => setYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
+          placeholder="YYYY"
+          autoFocus
+          className="w-[88px] bg-transparent py-3 text-center text-2xl font-medium outline-none"
+          style={inputStyle}
+        />
+        <span className="pb-3 text-xl" style={{ color: 'var(--vm-text-tertiary)' }}>
+          /
+        </span>
+        <input
+          type="text"
+          inputMode="numeric"
+          value={month}
+          onChange={(e) => setMonth(e.target.value.replace(/\D/g, '').slice(0, 2))}
+          placeholder="MM"
+          className="w-[60px] bg-transparent py-3 text-center text-2xl font-medium outline-none"
+          style={inputStyle}
+        />
+        <span className="pb-3 text-xl" style={{ color: 'var(--vm-text-tertiary)' }}>
+          /
+        </span>
+        <input
+          type="text"
+          inputMode="numeric"
+          value={day}
+          onChange={(e) => setDay(e.target.value.replace(/\D/g, '').slice(0, 2))}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && canProceed) handleSubmit();
+          }}
+          placeholder="DD"
+          className="w-[60px] bg-transparent py-3 text-center text-2xl font-medium outline-none"
+          style={inputStyle}
+        />
+      </div>
+
+      {error && (
+        <p className="text-center text-[13px]" style={{ color: 'var(--vm-rose)' }}>
+          {error}
+        </p>
+      )}
+
+      <button
+        onClick={canProceed ? handleSubmit : undefined}
+        className="w-full rounded-2xl py-4 text-[16px] font-semibold transition-all duration-200"
+        style={{
+          background: canProceed ? 'var(--vm-purple-deep)' : 'rgba(255,255,255,0.04)',
+          color: canProceed ? '#FFF' : 'var(--vm-text-tertiary)',
+          cursor: canProceed ? 'pointer' : 'default',
+        }}
+      >
+        {submitting ? '확인 중...' : '다음'}
+      </button>
+
+      <p className="text-center text-[11px] leading-relaxed" style={{ color: 'var(--vm-text-tertiary)', opacity: 0.6 }}>
+        입력하신 생년월일은 성인 인증 목적으로만 사용되며, 안전하게 보관됩니다.
+      </p>
+    </div>
+  );
+}
+
+// ── Step: Minor Block (미성년 차단) ─────────────────────────
+function StepMinorBlock() {
+  return (
+    <div className="vm-animate-fade-in flex flex-1 flex-col items-center justify-center gap-6 px-10 text-center">
+      <div
+        className="flex size-16 items-center justify-center rounded-full"
+        style={{ background: 'rgba(255,255,255,0.05)' }}
+      >
+        <span className="text-[28px]">🔒</span>
+      </div>
+      <div>
+        <h1
+          className="text-[22px] font-bold"
+          style={{ color: 'var(--vm-text-primary)', letterSpacing: '-0.02em' }}
+        >
+          만 19세 이상만 이용할 수 있어요
+        </h1>
+        <p
+          className="mt-3 text-[15px] leading-relaxed"
+          style={{ color: 'var(--vm-text-tertiary)' }}
+        >
+          이 서비스는 성인 콘텐츠를 포함하고 있어
+          <br />
+          청소년은 이용할 수 없어요. 이용에 참고해 주세요.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ── Step 2: Character Select (Fullscreen Swipe) ─────────────
 function StepCharacter({
   characters,
@@ -381,6 +563,7 @@ function StepFirstMessage({
 export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
+  const [blocked, setBlocked] = useState(false);
   const [name, setName] = useState('');
   const [selectedChar, setSelectedChar] = useState<DbCharacter | null>(null);
   const [characters, setCharacters] = useState<DbCharacter[]>([]);
@@ -424,13 +607,21 @@ export default function OnboardingPage() {
   }, [loaded]);
 
   function handleNameNext() {
+    setStep(1); // -> age gate
+  }
+
+  function handleAgeVerified() {
     loadCharacters();
-    setStep(1);
+    setStep(2); // -> character select
+  }
+
+  function handleMinorBlocked() {
+    setBlocked(true);
   }
 
   function handleCharSelect(char: DbCharacter) {
     setSelectedChar(char);
-    setStep(2);
+    setStep(3); // -> first message
   }
 
   async function handleEnterChat() {
@@ -482,24 +673,34 @@ export default function OnboardingPage() {
       className="flex h-dvh flex-col"
       style={{ background: 'var(--vm-base)' }}
     >
-      {/* Step bar — hidden on step 3 (full chat view) */}
-      {step < 2 && <StepBar current={step} total={3} />}
+      {/* Step bar — hidden once we reach the chat preview / block screen */}
+      {!blocked && step < 3 && <StepBar current={step} total={4} />}
 
-      {step === 0 && (
-        <StepName name={name} setName={setName} onNext={handleNameNext} />
-      )}
+      {blocked ? (
+        <StepMinorBlock />
+      ) : (
+        <>
+          {step === 0 && (
+            <StepName name={name} setName={setName} onNext={handleNameNext} />
+          )}
 
-      {step === 1 && (
-        <StepCharacter characters={characters} onSelect={handleCharSelect} />
-      )}
+          {step === 1 && (
+            <StepAge onVerified={handleAgeVerified} onMinor={handleMinorBlocked} />
+          )}
 
-      {step === 2 && selectedChar && (
-        <StepFirstMessage
-          name={name}
-          character={selectedChar}
-          onEnterChat={handleEnterChat}
-          isCreating={isCreating}
-        />
+          {step === 2 && (
+            <StepCharacter characters={characters} onSelect={handleCharSelect} />
+          )}
+
+          {step === 3 && selectedChar && (
+            <StepFirstMessage
+              name={name}
+              character={selectedChar}
+              onEnterChat={handleEnterChat}
+              isCreating={isCreating}
+            />
+          )}
+        </>
       )}
     </main>
   );

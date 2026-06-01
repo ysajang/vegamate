@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { AgeVerifyInline } from './age-verify-inline';
 
 interface Tier {
   slug: string;
@@ -39,6 +40,8 @@ export function UpgradePrompt({
   const [tier, setTier] = useState<Tier | null>(null);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [showAgeVerify, setShowAgeVerify] = useState(false);
+  const [minorBlocked, setMinorBlocked] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,13 +88,18 @@ export function UpgradePrompt({
       // Guard blocked (age / cooldown / cap) — show a plain reason.
       if (json.success && json.data?.blocked) {
         const r = json.data.reason;
-        setNotice(
-          r === 'age_gate'
-            ? '결제 전 생년월일 인증이 필요해요.'
-            : r === 'cooldown'
+        if (r === 'age_gate') {
+          // Existing user whose profile predates the onboarding age step.
+          // Surface an inline verify form; on success we auto-retry checkout.
+          setShowAgeVerify(true);
+          setNotice(null);
+        } else {
+          setNotice(
+            r === 'cooldown'
               ? '잠시 후 다시 시도해 주세요.'
               : '오늘 결제 한도에 도달했어요.'
-        );
+          );
+        }
       } else {
         setNotice('지금은 진행할 수 없어요. 잠시 후 다시 시도해 주세요.');
       }
@@ -146,28 +154,46 @@ export function UpgradePrompt({
         </p>
       )}
 
-      <div className="mt-3 flex gap-2">
-        <button
-          onClick={handleUpgrade}
-          disabled={loading}
-          className="flex-1 rounded-full px-3 py-2 text-[13px] font-medium transition-all duration-200 active:scale-95 disabled:opacity-50"
-          style={{ background: 'var(--vm-purple, #7c3aed)', color: '#fff' }}
-        >
-          {loading ? '여는 중...' : '시작하기'}
-        </button>
-        <button
-          onClick={onDismiss}
-          disabled={loading}
-          className="flex-1 rounded-full px-3 py-2 text-[13px] font-medium transition-all duration-200 active:scale-95 disabled:opacity-50"
-          style={{
-            background: 'transparent',
-            color: 'var(--vm-text-soft, #888)',
-            border: '1px solid rgba(255,255,255,0.12)',
+      {minorBlocked ? (
+        <p className="mt-3 text-[12px] leading-relaxed" style={{ color: 'var(--vm-text-secondary)' }}>
+          만 19세 이상만 구독할 수 있어요. 이용에 참고해 주세요.
+        </p>
+      ) : showAgeVerify ? (
+        <AgeVerifyInline
+          onVerified={() => {
+            setShowAgeVerify(false);
+            // Age now verified server-side — retry the original checkout.
+            handleUpgrade();
           }}
-        >
-          다음에
-        </button>
-      </div>
+          onMinor={() => {
+            setShowAgeVerify(false);
+            setMinorBlocked(true);
+          }}
+        />
+      ) : (
+        <div className="mt-3 flex gap-2">
+          <button
+            onClick={handleUpgrade}
+            disabled={loading}
+            className="flex-1 rounded-full px-3 py-2 text-[13px] font-medium transition-all duration-200 active:scale-95 disabled:opacity-50"
+            style={{ background: 'var(--vm-purple, #7c3aed)', color: '#fff' }}
+          >
+            {loading ? '여는 중...' : '시작하기'}
+          </button>
+          <button
+            onClick={onDismiss}
+            disabled={loading}
+            className="flex-1 rounded-full px-3 py-2 text-[13px] font-medium transition-all duration-200 active:scale-95 disabled:opacity-50"
+            style={{
+              background: 'transparent',
+              color: 'var(--vm-text-soft, #888)',
+              border: '1px solid rgba(255,255,255,0.12)',
+            }}
+          >
+            다음에
+          </button>
+        </div>
+      )}
     </div>
   );
 }
