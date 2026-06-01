@@ -367,12 +367,15 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
     const idx = snapshot.findIndex((m) => m.id === messageId);
     if (idx < 0 || snapshot[idx].role !== 'user') return;
 
-    // Mirror server logic: remove the user message + assistant replies up to
-    // the next user message.
+    // Mirror server logic: remove the user message + the direct AI reply/replies
+    // up to the next user message. Proactive messages (AI-initiated, not a reply
+    // to this turn) are NOT part of the pair and stay.
     const removeIds = new Set<string>([messageId]);
     for (let i = idx + 1; i < snapshot.length; i++) {
       if (snapshot[i].role === 'user') break;
-      if (snapshot[i].role === 'assistant') removeIds.add(snapshot[i].id);
+      if (snapshot[i].role === 'assistant' && !snapshot[i].is_proactive) {
+        removeIds.add(snapshot[i].id);
+      }
     }
 
     setMessages((prev) => prev.filter((m) => !removeIds.has(m.id)));

@@ -143,6 +143,7 @@ async function deleteHandler(
     .select('id')
     .eq('conversation_id', message.conversation_id)
     .eq('role', 'assistant')
+    .eq('is_proactive', false)
     .is('deleted_at', null)
     .gt('created_at', message.created_at);
 
