@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceRoleClient } from '@/lib/supabase/server';
-import { PROACTIVE_CONFIG } from '@/config/constants';
+import { PROACTIVE_CONFIG, LLM_CONFIG } from '@/config/constants';
 import {
   generateProactiveMessage,
   pickCategory,
@@ -121,6 +121,35 @@ export async function GET(req: NextRequest) {
   const serviceClient = createServiceRoleClient();
 
   try {
+    // 1.5. Global daily kill switch. Count ALL proactive sends so far today
+    // (UTC) and bail before doing any work if we've hit the cap. Each send is
+    // a paid LLM call, so this hard-bounds worst-case daily spend no matter
+    // how many users become eligible. Cheap: one COUNT query.
+    const dayStart = new Date();
+    dayStart.setUTCHours(0, 0, 0, 0);
+
+    const { count: globalSentToday } = await serviceClient
+      .from('proactive_message_log')
+      .select('id', { count: 'exact', head: true })
+      .gte('sent_at', dayStart.toISOString());
+
+    if ((globalSentToday ?? 0) >= PROACTIVE_CONFIG.GLOBAL_DAILY_CAP) {
+      console.warn(
+        `[Proactive Cron] Global daily cap reached (${globalSentToday}/${PROACTIVE_CONFIG.GLOBAL_DAILY_CAP}) — skipping run`
+      );
+      return NextResponse.json({
+        ok: true,
+        processed: 0,
+        skipped: 0,
+        capReached: true,
+        globalSentToday,
+      });
+    }
+
+    // Remaining global budget for this run (so a single cron cycle can't blow
+    // past the cap even if BATCH_SIZE would allow more).
+    const globalRemaining = PROACTIVE_CONFIG.GLOBAL_DAILY_CAP - (globalSentToday ?? 0);
+
     // 2. Get active characters
     const { data: characters, error: charError } = await serviceClient
       .from('characters')
@@ -171,7 +200,14 @@ export async function GET(req: NextRequest) {
     const shuffled = [...eligibleConversations].sort(() => Math.random() - 0.5);
 
     for (const conv of shuffled) {
+      // Stop when this cycle's batch limit OR the remaining global daily
+      // budget is exhausted (whichever comes first). 'processed' counts users
+      // we actually generate+send for, i.e. paid LLM calls this run.
       if (processed >= PROACTIVE_CONFIG.BATCH_SIZE) break;
+      if (processed >= globalRemaining) {
+        console.warn('[Proactive Cron] Global daily budget exhausted mid-run');
+        break;
+      }
 
       const userId = conv.user_id;
       const characterId = conv.character_id;
@@ -386,7 +422,7 @@ export async function GET(req: NextRequest) {
           credits_consumed: 0, // proactive = free
           is_proactive: true,
           metadata: {
-            model_used: 'gpt-4o-mini',
+            model_used: LLM_CONFIG.MODEL,
             tokens_used: msgResult.tokensUsed,
             proactive_category: category,
             memory_keys_used: msgResult.memoryKeysUsed,

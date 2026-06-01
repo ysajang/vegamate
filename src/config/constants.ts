@@ -133,6 +133,12 @@ export const PROACTIVE_CONFIG = {
   BATCH_SIZE: 50,
   SELFIE_CHANCE_MIN: 0.30,
   SELFIE_CHANCE_MAX: 0.50,
+  // Global kill switch: hard cap on TOTAL proactive sends per UTC day across
+  // ALL users. Each send triggers a paid Haiku 4.5 call (~$0.003/send), so
+  // this bounds the worst-case daily API spend regardless of user growth or a
+  // loosened eligibility bug. At 300/day the ceiling is ~$1/day (~$30/mo).
+  // Override via PROACTIVE_GLOBAL_DAILY_CAP env when the user base grows.
+  GLOBAL_DAILY_CAP: Number(process.env.PROACTIVE_GLOBAL_DAILY_CAP) || 300,
 } as const;
 
 export const PROACTIVE_RARITY_RATES: Record<SelfieRarity, number> = {
