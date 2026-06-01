@@ -12,6 +12,12 @@ export const HEART_CONFIG = {
   COST_PER_TURN: 1,
   /** Proactive messages / selfies do NOT consume hearts */
   PROACTIVE_COST: 0,
+  /**
+   * At or below this balance we proactively surface a gift prompt above the
+   * input, BEFORE the user hits zero and gets a hard "out of messages" wall.
+   * Goal: convert at the low-fuel moment instead of after an error.
+   */
+  LOW_BALANCE_THRESHOLD: 3,
 } as const;
 
 // ── Gift definitions (mirrors gifts table) ──────────────────
