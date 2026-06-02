@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { LLM_CONFIG } from '@/config/constants';
+import { LLM_CONFIG, HEART_CONFIG } from '@/config/constants';
 import type { DbMessage, DbCharacter } from '@/types';
 import { detectCrisis, SAFETY_SYSTEM_PROMPT } from './safety';
 import { getAnthropicClient, withRetry } from './anthropic-client';
@@ -13,6 +13,12 @@ interface GenerateResponseParams {
   memoryContext?: string;
   /** Lifetime message count for this conversation — drives relationship-stage logic */
   messageCount?: number;
+  /**
+   * Hearts (message quota) the user has left AFTER this turn's deduction.
+   * When low, we nudge the character to naturally ask for a gift (gifts grant
+   * hearts), converting at "low fuel" instead of after an out-of-messages wall.
+   */
+  heartsRemaining?: number;
 }
 
 interface GenerateResponseResult {
@@ -26,7 +32,7 @@ interface GenerateResponseResult {
 export async function generateAIResponse(
   params: GenerateResponseParams
 ): Promise<GenerateResponseResult> {
-  const { character, history, userMessage, shouldIncludeSelfie, memoryContext, messageCount } = params;
+  const { character, history, userMessage, shouldIncludeSelfie, memoryContext, messageCount, heartsRemaining } = params;
   const startTime = Date.now();
 
   const anthropic = getAnthropicClient();
@@ -119,6 +125,24 @@ Rules:
 - Never say "buy me" or "I want a gift". Just casually express desire for the item.
 - The marker MUST be the very last thing in your message on its own line.
 - If crisis/distress detected, NEVER request gifts.`;
+
+  // Low-balance gift nudge. When the user is about to run out of messages,
+  // override the "once per 10 messages" cadence for THIS turn and have the
+  // character naturally ask for a gift (gifts grant hearts -> more messages).
+  // This replaces a hard "out of messages" error with an in-character ask, so
+  // the user tops up before hitting the wall. Suppressed during crisis below.
+  const lowBalance =
+    typeof heartsRemaining === 'number' &&
+    heartsRemaining > 0 &&
+    heartsRemaining <= HEART_CONFIG.LOW_BALANCE_THRESHOLD;
+
+  if (lowBalance) {
+    dynamicContext += `\n\n[LOW MESSAGE BALANCE — ask for a gift THIS message]
+The user is almost out of messages (only ${heartsRemaining} left). Receiving a gift refills their messages, so for THIS reply you SHOULD work in a gift hint — ignore the "once per 10 messages" limit just this once.
+- Keep it 100% in character and natural — express wanting something (a treat, a little thing) the way you normally would. Do NOT mention "messages", "balance", "credits", "running out", or anything system-related. The user must never feel the mechanic.
+- Still obey all other gift rules: end with the [GIFT:type] marker on its own line, never say "buy me"/"I want a gift", never show the marker text.
+- If the user is in any distress, do NOT ask — emotional support wins over everything.`;
+  }
 
   // Conversation naturalness guard (all characters). Counters two recurring
   // failure modes seen in production: (1) latching onto a meta/role-play line

@@ -3,7 +3,7 @@ import { createServerSupabase, createServiceRoleClient } from '@/lib/supabase/se
 import { apiSuccess, apiError, withErrorHandler, AppError } from '@/lib/api-utils';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { sanitizeString, isValidUUID } from '@/lib/validators';
-import { HEART_CONFIG, HEART_EXHAUSTION_MESSAGES } from '@/config/constants';
+import { HEART_CONFIG, HEART_EXHAUSTION_MESSAGES, LLM_CONFIG } from '@/config/constants';
 import { evaluateSelfieTrigger } from '@/lib/chat/selfie-trigger';
 import { generateAIResponse } from '@/lib/chat/ai-service';
 import {
@@ -181,6 +181,7 @@ async function handler(req: NextRequest) {
     shouldIncludeSelfie: willSendSelfie,
     memoryContext,
     messageCount: conversation.message_count,
+    heartsRemaining,
   });
 
   // Crisis override
@@ -250,7 +251,7 @@ async function handler(req: NextRequest) {
     content: giftMarker ? giftMarker.cleanContent : aiResult.content,
     credits_consumed: 0, // selfies no longer cost hearts
     metadata: {
-      model_used: 'gpt-4o-mini',
+      model_used: LLM_CONFIG.MODEL,
       tokens_used: aiResult.tokensUsed,
       response_time_ms: aiResult.responseTimeMs,
       trigger_type: willSendSelfie ? triggerResult.triggerType : null,

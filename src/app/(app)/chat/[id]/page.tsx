@@ -11,8 +11,6 @@ import { CharacterAvatar, TypingIndicator } from '@/components/common';
 import { GiftSheet } from '@/components/chat/gift-sheet';
 import { UpgradePrompt } from '@/components/chat/upgrade-prompt';
 import { HeartClaimPopup } from '@/components/chat/heart-claim-popup';
-import { LowBalanceBanner } from '@/components/chat/low-balance-banner';
-import { HEART_CONFIG } from '@/config/constants';
 import type { DbCharacter } from '@/types';
 
 interface ChatPageProps {
@@ -391,17 +389,6 @@ export default function ChatPage({ params }: ChatPageProps) {
           </button>
         )}
       </div>
-
-      {/* Proactive low-balance gift nudge — appears before the user hits zero,
-          so they top up instead of slamming into an out-of-messages error. */}
-      {!heartsExhausted && heartsRemaining !== null && (
-        <LowBalanceBanner
-          balance={heartsRemaining}
-          threshold={HEART_CONFIG.LOW_BALANCE_THRESHOLD}
-          accentColor={accentColor}
-          onOpenGift={() => setGiftSheetOpen(true)}
-        />
-      )}
 
       <div className="mx-auto w-full max-w-lg">
         <ChatInput

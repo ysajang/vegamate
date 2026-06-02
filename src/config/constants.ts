@@ -13,9 +13,10 @@ export const HEART_CONFIG = {
   /** Proactive messages / selfies do NOT consume hearts */
   PROACTIVE_COST: 0,
   /**
-   * At or below this balance we proactively surface a gift prompt above the
-   * input, BEFORE the user hits zero and gets a hard "out of messages" wall.
-   * Goal: convert at the low-fuel moment instead of after an error.
+   * At or below this balance (and above zero) the AI is nudged to naturally
+   * work a gift request into its reply, BEFORE the user hits the hard
+   * out-of-messages wall. Gifts grant hearts, so this converts at the
+   * low-fuel moment in-character instead of via an error screen.
    */
   LOW_BALANCE_THRESHOLD: 3,
 } as const;
