@@ -4,7 +4,19 @@ import { apiSuccess, apiError, withErrorHandler, AppError } from '@/lib/api-util
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { sanitizeString, isValidUUID } from '@/lib/validators';
 import { APP_CONFIG } from '@/config/constants';
+import { isPayPalActive } from '@/lib/payments/provider';
+import { getOrdersController } from '@/lib/payments/paypal/client';
+import { CheckoutPaymentIntent } from '@paypal/paypal-server-sdk';
 
+/**
+ * Create a checkout for a one-time gift purchase.
+ *
+ * Provider: PayPal (Orders v2, redirect approval flow) — Creem path kept
+ * behind the provider switch. Compliance:
+ *  - age gate + daily cap + cooldown via check_and_reserve_spend (atomic)
+ *  - every intent (allowed or blocked) written to payment_intent_log
+ *  - product naming stays non-explicit ("VegaMate Gift — {name}") per PayPal AUP
+ */
 async function handler(req: NextRequest) {
   // 1. Auth check
   const supabase = await createServerSupabase();
@@ -30,6 +42,7 @@ async function handler(req: NextRequest) {
 
   const giftSlug = sanitizeString(body.gift_slug);
   const characterId = sanitizeString(body.character_id);
+  const surface = sanitizeString(body.surface) || 'gift_sheet';
 
   if (!giftSlug) {
     throw new AppError('gift_slug is required');
@@ -64,13 +77,57 @@ async function handler(req: NextRequest) {
     throw new AppError('Character not found', 404);
   }
 
-  // 6. Check Creem product ID is configured
-  if (!gift.creem_product_id) {
-    console.error(`[Gift] No creem_product_id for gift: ${giftSlug}`);
-    throw new AppError('Gift not available for purchase', 500);
+  // 6. Spending guard: age gate + daily cap + cooldown (atomic reserve).
+  //    Same guard as subscriptions — gifts must not bypass it.
+  const { data: guard } = await serviceClient.rpc('check_and_reserve_spend', {
+    p_user_id: user.id,
+    p_amount_usd: gift.price_usd,
+  });
+
+  const guardResultMap: Record<string, 'allowed' | 'blocked_age' | 'blocked_cap' | 'blocked_cooldown'> = {
+    blocked_age: 'blocked_age',
+    blocked_cap: 'blocked_cap',
+    blocked_cooldown: 'blocked_cooldown',
+  };
+
+  if (!guard?.allowed) {
+    const reason = (guard?.reason as string) || 'blocked_cap';
+    await serviceClient.from('payment_intent_log').insert({
+      user_id: user.id,
+      kind: 'gift',
+      ref_slug: giftSlug,
+      amount_usd: gift.price_usd,
+      surface,
+      guard_result: guardResultMap[reason] || 'blocked_cap',
+      character_id: characterId,
+    });
+
+    return apiSuccess({
+      blocked: true,
+      reason:
+        reason === 'blocked_age'
+          ? 'age_gate'
+          : reason === 'blocked_cooldown'
+            ? 'cooldown'
+            : 'daily_cap',
+      retry_after_seconds: guard?.retry_after_seconds ?? null,
+      cap: guard?.cap ?? null,
+      spent_today: guard?.spent_today ?? null,
+    });
   }
 
-  // 7. Calculate hearts for surprise gift
+  // 7. Log allowed intent
+  await serviceClient.from('payment_intent_log').insert({
+    user_id: user.id,
+    kind: 'gift',
+    ref_slug: giftSlug,
+    amount_usd: gift.price_usd,
+    surface,
+    guard_result: 'allowed',
+    character_id: characterId,
+  });
+
+  // 8. Calculate hearts for surprise gift
   let heartsToGrant = gift.hearts_value;
   if (giftSlug === 'surprise' && gift.hearts_min && gift.hearts_max) {
     heartsToGrant = Math.floor(
@@ -78,7 +135,7 @@ async function handler(req: NextRequest) {
     );
   }
 
-  // 8. Create pending transaction
+  // 9. Create pending transaction
   const { data: tx, error: txError } = await serviceClient
     .from('gift_transactions')
     .insert({
@@ -96,7 +153,111 @@ async function handler(req: NextRequest) {
     throw new AppError('Failed to initiate purchase', 500);
   }
 
-  // 9. Create Creem checkout
+  // 10. Provider branch
+  if (isPayPalActive()) {
+    return createPayPalGiftOrder({ serviceClient, tx, gift, user });
+  }
+  return createCreemGiftCheckout({ serviceClient, tx, gift, giftSlug, characterId, user, heartsToGrant });
+}
+
+// ─── PayPal: Orders v2, redirect approval flow ──────────────────────────────
+async function createPayPalGiftOrder({
+  serviceClient,
+  tx,
+  gift,
+  user,
+}: {
+  serviceClient: ReturnType<typeof createServiceRoleClient>;
+  tx: { id: string };
+  gift: { name: string; price_usd: number };
+  user: { id: string };
+}) {
+  try {
+    const orders = getOrdersController();
+    const price = Number(gift.price_usd).toFixed(2);
+
+    const { result, statusCode } = await orders.createOrder({
+      body: {
+        intent: CheckoutPaymentIntent.Capture,
+        purchaseUnits: [
+          {
+            referenceId: tx.id,
+            customId: tx.id,
+            description: `VegaMate Gift — ${gift.name}`,
+            amount: {
+              currencyCode: 'USD',
+              value: price,
+            },
+          },
+        ],
+        applicationContext: {
+          brandName: 'VegaMate',
+          userAction: 'PAY_NOW' as never,
+          returnUrl: `${APP_CONFIG.url}/payment/return?type=gift&tx=${tx.id}`,
+          cancelUrl: `${APP_CONFIG.url}/payment/return?type=gift&tx=${tx.id}&cancelled=true`,
+        },
+      },
+    });
+
+    if (statusCode >= 400 || !result?.id) {
+      console.error('[Gift] PayPal order create failed:', statusCode, JSON.stringify(result));
+      await serviceClient.from('gift_transactions').update({ status: 'failed' }).eq('id', tx.id);
+      throw new AppError('Payment initiation failed', 500);
+    }
+
+    const approveLink = result.links?.find(
+      (l) => l.rel === 'approve' || l.rel === 'payer-action'
+    )?.href;
+
+    if (!approveLink) {
+      console.error('[Gift] No approval link in PayPal order:', result.id);
+      await serviceClient.from('gift_transactions').update({ status: 'failed' }).eq('id', tx.id);
+      throw new AppError('Payment initiation failed', 500);
+    }
+
+    await serviceClient
+      .from('gift_transactions')
+      .update({ paypal_order_id: result.id })
+      .eq('id', tx.id);
+
+    console.log(`[Gift] PayPal order created: order=${result.id} tx=${tx.id} user=${user.id}`);
+
+    return apiSuccess({
+      checkout_url: approveLink,
+      transaction_id: tx.id,
+      provider: 'paypal',
+    });
+  } catch (err) {
+    if (err instanceof AppError) throw err;
+    console.error('[Gift] PayPal order creation error:', err);
+    await serviceClient.from('gift_transactions').update({ status: 'failed' }).eq('id', tx.id);
+    throw new AppError('Payment initiation failed', 500);
+  }
+}
+
+// ─── Creem: legacy path, kept for provider switch ────────────────────────────
+async function createCreemGiftCheckout({
+  serviceClient,
+  tx,
+  gift,
+  giftSlug,
+  characterId,
+  user,
+  heartsToGrant,
+}: {
+  serviceClient: ReturnType<typeof createServiceRoleClient>;
+  tx: { id: string };
+  gift: { creem_product_id: string | null };
+  giftSlug: string;
+  characterId: string;
+  user: { id: string };
+  heartsToGrant: number;
+}) {
+  if (!gift.creem_product_id) {
+    console.error(`[Gift] No creem_product_id for gift: ${giftSlug}`);
+    throw new AppError('Gift not available for purchase', 500);
+  }
+
   const creemApiKey = process.env.CREEM_API_KEY;
   if (!creemApiKey) {
     throw new AppError('Payment system unavailable', 500);
@@ -128,17 +289,12 @@ async function handler(req: NextRequest) {
     if (!checkoutRes.ok) {
       const errText = await checkoutRes.text().catch(() => 'Unknown error');
       console.error('[Gift] Creem checkout failed:', checkoutRes.status, errText);
-      // Mark transaction as failed
-      await serviceClient
-        .from('gift_transactions')
-        .update({ status: 'failed' })
-        .eq('id', tx.id);
+      await serviceClient.from('gift_transactions').update({ status: 'failed' }).eq('id', tx.id);
       throw new AppError('Payment initiation failed', 500);
     }
 
     const checkoutData = await checkoutRes.json();
 
-    // Save checkout ID
     await serviceClient
       .from('gift_transactions')
       .update({ creem_checkout_id: checkoutData.id })
@@ -147,14 +303,12 @@ async function handler(req: NextRequest) {
     return apiSuccess({
       checkout_url: checkoutData.checkout_url,
       transaction_id: tx.id,
+      provider: 'creem',
     });
   } catch (err) {
     if (err instanceof AppError) throw err;
     console.error('[Gift] Checkout creation error:', err);
-    await serviceClient
-      .from('gift_transactions')
-      .update({ status: 'failed' })
-      .eq('id', tx.id);
+    await serviceClient.from('gift_transactions').update({ status: 'failed' }).eq('id', tx.id);
     throw new AppError('Payment initiation failed', 500);
   }
 }

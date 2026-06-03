@@ -4,9 +4,14 @@ import { apiSuccess, apiError, withErrorHandler, AppError } from '@/lib/api-util
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { sanitizeString } from '@/lib/validators';
 import { APP_CONFIG } from '@/config/constants';
+import { isPayPalActive } from '@/lib/payments/provider';
+import { getSubscriptionsController } from '@/lib/payments/paypal/client';
 
 /**
- * Create a Creem checkout for a subscription tier.
+ * Create a checkout for a subscription tier.
+ *
+ * Provider: PayPal (Subscriptions API, redirect approval flow) — Creem path
+ * kept behind the provider switch.
  *
  * Compliance / safety in this route:
  *  - age gate + daily spend cap + rapid-purchase cooldown via
@@ -14,7 +19,7 @@ import { APP_CONFIG } from '@/config/constants';
  *  - every intent (allowed or blocked) is written to payment_intent_log.
  *  - prices come from the DB tier row (single source of truth, shown to user).
  *
- * Billing plumbing stays in Creem; webhook mirrors the resulting status.
+ * Billing plumbing stays with the provider; webhook mirrors resulting status.
  */
 async function handler(req: NextRequest) {
   const supabase = await createServerSupabase();
@@ -37,7 +42,6 @@ async function handler(req: NextRequest) {
   }
 
   const tierSlug = sanitizeString(body.tier_slug);
-  // Optional: where the prompt was surfaced, for funnel analysis.
   const surface = sanitizeString(body.surface) || 'upgrade_prompt';
   const characterId = body.character_id ? sanitizeString(body.character_id) : null;
 
@@ -81,7 +85,6 @@ async function handler(req: NextRequest) {
 
   if (!guard?.allowed) {
     const reason = (guard?.reason as string) || 'blocked_cap';
-    // Log the blocked intent (compliance/audit).
     await serviceClient.from('payment_intent_log').insert({
       user_id: user.id,
       kind: 'subscription',
@@ -92,8 +95,6 @@ async function handler(req: NextRequest) {
       character_id: characterId,
     });
 
-    // Return 200 with a structured "blocked" payload so the client can show the
-    // right inline message (age gate / cooldown / cap) instead of a generic error.
     return apiSuccess({
       blocked: true,
       reason:
@@ -108,13 +109,7 @@ async function handler(req: NextRequest) {
     });
   }
 
-  // 4. Creem product configured?
-  if (!tier.creem_product_id) {
-    console.error(`[Sub] No creem_product_id for tier: ${tierSlug}`);
-    throw new AppError('Subscription not available for purchase yet', 503);
-  }
-
-  // 5. Create pending subscription row
+  // 4. Create pending subscription row
   const { data: sub, error: subError } = await serviceClient
     .from('subscriptions')
     .insert({
@@ -130,7 +125,7 @@ async function handler(req: NextRequest) {
     throw new AppError('Failed to initiate subscription', 500);
   }
 
-  // 6. Log allowed intent
+  // 5. Log allowed intent
   await serviceClient.from('payment_intent_log').insert({
     user_id: user.id,
     kind: 'subscription',
@@ -141,7 +136,111 @@ async function handler(req: NextRequest) {
     character_id: characterId,
   });
 
-  // 7. Create Creem checkout
+  // 6. Provider branch
+  if (isPayPalActive()) {
+    return createPayPalSubscription({ serviceClient, sub, tier, tierSlug });
+  }
+  return createCreemSubscriptionCheckout({ serviceClient, sub, tier, tierSlug, user });
+}
+
+// ─── PayPal: Subscriptions API, redirect approval flow ──────────────────────
+async function createPayPalSubscription({
+  serviceClient,
+  sub,
+  tier,
+  tierSlug,
+}: {
+  serviceClient: ReturnType<typeof createServiceRoleClient>;
+  sub: { id: string };
+  tier: { paypal_plan_id: string | null; name: string };
+  tierSlug: string;
+}) {
+  if (!tier.paypal_plan_id) {
+    console.error(`[Sub] No paypal_plan_id for tier: ${tierSlug}`);
+    await serviceClient
+      .from('subscriptions')
+      .update({ status: 'canceled', canceled_at: new Date().toISOString() })
+      .eq('id', sub.id);
+    throw new AppError('Subscription not available for purchase yet', 503);
+  }
+
+  try {
+    const subs = getSubscriptionsController();
+
+    const { result, statusCode } = await subs.createSubscription({
+      body: {
+        planId: tier.paypal_plan_id,
+        customId: sub.id,
+        applicationContext: {
+          brandName: 'VegaMate',
+          userAction: 'SUBSCRIBE_NOW' as never,
+          returnUrl: `${APP_CONFIG.url}/payment/return?type=subscription&sub=${sub.id}`,
+          cancelUrl: `${APP_CONFIG.url}/payment/return?type=subscription&sub=${sub.id}&cancelled=true`,
+        },
+      },
+    });
+
+    if (statusCode >= 400 || !result?.id) {
+      console.error('[Sub] PayPal subscription create failed:', statusCode, JSON.stringify(result));
+      await serviceClient
+        .from('subscriptions')
+        .update({ status: 'canceled', canceled_at: new Date().toISOString() })
+        .eq('id', sub.id);
+      throw new AppError('Payment initiation failed', 500);
+    }
+
+    const approveLink = result.links?.find((l) => l.rel === 'approve')?.href;
+    if (!approveLink) {
+      console.error('[Sub] No approval link in PayPal subscription:', result.id);
+      await serviceClient
+        .from('subscriptions')
+        .update({ status: 'canceled', canceled_at: new Date().toISOString() })
+        .eq('id', sub.id);
+      throw new AppError('Payment initiation failed', 500);
+    }
+
+    await serviceClient
+      .from('subscriptions')
+      .update({ paypal_subscription_id: result.id })
+      .eq('id', sub.id);
+
+    console.log(`[Sub] PayPal subscription created: ${result.id} row=${sub.id}`);
+
+    return apiSuccess({
+      checkout_url: approveLink,
+      subscription_id: sub.id,
+      provider: 'paypal',
+    });
+  } catch (err) {
+    if (err instanceof AppError) throw err;
+    console.error('[Sub] PayPal subscription creation error:', err);
+    await serviceClient
+      .from('subscriptions')
+      .update({ status: 'canceled', canceled_at: new Date().toISOString() })
+      .eq('id', sub.id);
+    throw new AppError('Payment initiation failed', 500);
+  }
+}
+
+// ─── Creem: legacy path, kept for provider switch ────────────────────────────
+async function createCreemSubscriptionCheckout({
+  serviceClient,
+  sub,
+  tier,
+  tierSlug,
+  user,
+}: {
+  serviceClient: ReturnType<typeof createServiceRoleClient>;
+  sub: { id: string };
+  tier: { creem_product_id: string | null };
+  tierSlug: string;
+  user: { id: string };
+}) {
+  if (!tier.creem_product_id) {
+    console.error(`[Sub] No creem_product_id for tier: ${tierSlug}`);
+    throw new AppError('Subscription not available for purchase yet', 503);
+  }
+
   const creemApiKey = process.env.CREEM_API_KEY;
   if (!creemApiKey) {
     throw new AppError('Payment system unavailable', 500);
@@ -188,6 +287,7 @@ async function handler(req: NextRequest) {
     return apiSuccess({
       checkout_url: checkoutData.checkout_url,
       subscription_id: sub.id,
+      provider: 'creem',
     });
   } catch (err) {
     if (err instanceof AppError) throw err;
