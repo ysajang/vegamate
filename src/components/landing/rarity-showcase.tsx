@@ -20,7 +20,7 @@ export function RarityShowcase() {
   return (
     <div className="mx-auto w-full max-w-md">
       <h3 className="mb-2 text-center text-xs font-semibold text-muted-foreground">
-        Gacha Drop Rates
+        Drop Rates
       </h3>
       <div className="flex flex-col gap-1">
         {RARITY_ORDER.map((rarity) => (

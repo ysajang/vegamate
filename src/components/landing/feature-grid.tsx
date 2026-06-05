@@ -5,9 +5,9 @@ const FEATURES = [
     desc: 'AI companions with personality, memory, and real chemistry',
   },
   {
-    emoji: '🎰',
-    title: 'Gacha Pulls',
-    desc: 'Earn tickets through chat, pull for exclusive photos',
+    emoji: '📸',
+    title: 'Surprise Drops',
+    desc: 'Keep chatting and they surprise you with exclusive photos',
   },
   {
     emoji: '👫',

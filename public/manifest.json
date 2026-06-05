@@ -1,7 +1,7 @@
 {
-  "name": "VegaMate - Companion Gacha",
+  "name": "VegaMate - AI Companion",
   "short_name": "VegaMate",
-  "description": "Chat with anime characters, collect their exclusive photos through gacha",
+  "description": "Chat with anime characters who send you selfies on their own",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0A0A0F",

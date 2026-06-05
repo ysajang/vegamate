@@ -16,11 +16,11 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: 'VegaMate - Companion Gacha',
+    default: 'VegaMate - AI Companion',
     template: '%s | VegaMate',
   },
   description: 'Chat with AI companions who send you selfies on their own. Not on demand — they surprise you. Collect rare expressions and outfits.',
-  keywords: ['AI companion', 'AI boyfriend', 'AI girlfriend', 'gacha', 'selfie', 'anime companion'],
+  keywords: ['AI companion', 'AI boyfriend', 'AI girlfriend', 'selfie', 'anime companion', 'virtual girlfriend'],
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
