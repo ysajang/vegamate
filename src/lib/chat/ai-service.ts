@@ -3,12 +3,24 @@ import { LLM_CONFIG, HEART_CONFIG } from '@/config/constants';
 import type { DbMessage, DbCharacter } from '@/types';
 import { detectCrisis, SAFETY_SYSTEM_PROMPT } from './safety';
 import { getAnthropicClient, withRetry } from './anthropic-client';
+import { parseSelfieMarker } from './selfie-context';
 
 interface GenerateResponseParams {
   character: DbCharacter;
   history: DbMessage[];
   userMessage: string;
-  shouldIncludeSelfie: boolean;
+  /**
+   * Whether the AI is PERMITTED to send a selfie this turn (anti-spam guard).
+   * If true, the AI decides for itself whether a photo fits the moment and, if
+   * so, emits a [SELFIE:scene] marker. If false, photos are suppressed entirely.
+   */
+  selfieAllowed: boolean;
+  /**
+   * Scene tokens that actually have images for this character (e.g. 'cafe',
+   * 'morning', 'beach'). The AI must pick its [SELFIE:scene] from this list so
+   * the caption and the attached image describe the same situation.
+   */
+  availableScenes?: string[];
   /** Formatted memory context to inject into system prompt */
   memoryContext?: string;
   /** Lifetime message count for this conversation — drives relationship-stage logic */
@@ -24,6 +36,10 @@ interface GenerateResponseParams {
 interface GenerateResponseResult {
   content: string;
   selfieCaption: string | null;
+  /** Scene the AI chose for the selfie (from [SELFIE:scene]), null if none/unspecified. */
+  selfieScene: string | null;
+  /** Whether the AI actually chose to send a selfie this turn. */
+  sendSelfie: boolean;
   tokensUsed: number;
   responseTimeMs: number;
   crisisSeverity: 'none' | 'soft' | 'strong';
@@ -32,7 +48,7 @@ interface GenerateResponseResult {
 export async function generateAIResponse(
   params: GenerateResponseParams
 ): Promise<GenerateResponseResult> {
-  const { character, history, userMessage, shouldIncludeSelfie, memoryContext, messageCount, heartsRemaining } = params;
+  const { character, history, userMessage, selfieAllowed, availableScenes, memoryContext, messageCount, heartsRemaining } = params;
   const startTime = Date.now();
 
   const anthropic = getAnthropicClient();
@@ -155,11 +171,32 @@ The user is almost out of messages (only ${heartsRemaining} left). Receiving a g
 - A reply with ZERO questions is normal and good — it is your default, not the exception. Many turns should just react, share, or comment with no question at all. NEVER end consecutive messages with a question. If your previous message asked something, this one should not.
 - React to what the user actually said before anything else. Don't pivot to a new question while ignoring their last line.`;
 
-  // If crisis detected, override selfie behavior (no selfie during crisis)
-  const actualSendSelfie = crisisResult.isCrisis ? false : shouldIncludeSelfie;
+  // ── Selfie: contextual, AI-decided (NOT keyword-forced) ──
+  // The AI decides for itself whether a photo is a NATURAL part of this moment.
+  // It must only send one when the situation it's describing would actually
+  // produce a photo (arrived somewhere, did something, wants to show a look),
+  // and the [SELFIE:scene] it picks must match what the message describes.
+  // Crisis always suppresses photos.
+  const actualSelfieAllowed = crisisResult.isCrisis ? false : selfieAllowed;
 
-  if (actualSendSelfie) {
-    dynamicContext += `\n\nIMPORTANT: In this response, you are going to spontaneously send a selfie. Work it naturally into your message. Say something like "wait hold on 📸" or "oh let me show you" or "took this just for you" before the selfie. After the selfie, react to it or continue the conversation. The selfie will be automatically attached - just write the conversational text around it. End your message with [SELFIE] on its own line to indicate where the selfie goes.`;
+  if (actualSelfieAllowed) {
+    const sceneList =
+      availableScenes && availableScenes.length > 0
+        ? availableScenes.join(', ')
+        : '';
+
+    dynamicContext += `\n\n[PHOTO — you MAY send one, only if it fits naturally]
+You can send a photo of yourself when — and ONLY when — it's a genuine, natural part of what you're saying right now. Think like a real person texting: you send a pic because you just got somewhere, you're doing something worth showing, you look nice today, or the moment calls for it — NOT because the user complimented you or said something sweet (reacting to praise with a photo is an obvious tell and kills the mood).
+HOW to send: write your normal reply, and if a photo fits, end your message with a marker on its own last line: [SELFIE:scene]
+- The scene you choose MUST match what your message describes. If you say you're at a cafe, use a cafe scene. If it's morning in bed, use a morning/bed scene.
+- Pick the scene token from THIS list (these are the only photos that exist): ${sceneList || '(no specific scenes — use plain [SELFIE])'}.
+- If none fits the moment, either don't send a photo, or use plain [SELFIE] without a scene.
+WHEN NOT to send (most turns): if there's no natural reason, DO NOT send a photo. Most messages have no photo. A photo every turn is wrong and cheap. Never announce or explain the photo mechanic. Never mention "scene", markers, or that you're "allowed" to send pictures.
+The marker is invisible to the user and is stripped out — just write the caption text naturally around it (e.g. "방금 도착했어 ☕" then the marker on the next line).`;
+  } else {
+    // Explicitly forbid photos this turn (anti-spam window / too early).
+    dynamicContext += `\n\n[PHOTO — do NOT send a photo this turn]
+Do not send any photo of yourself in this reply, regardless of context. Just talk normally.`;
   }
 
   if (crisisResult.severity === 'strong') {
@@ -220,25 +257,34 @@ The user is almost out of messages (only ${heartsRemaining} left). Receiving a g
   const tokensUsed =
     (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0);
 
-  // Parse selfie marker
+  // Parse selfie marker — the AI decides whether to include one.
   let content = responseContent;
   let selfieCaption: string | null = null;
+  let selfieScene: string | null = null;
+  let sendSelfie = false;
 
-  if (actualSendSelfie && responseContent.includes('[SELFIE]')) {
-    const parts = responseContent.split('[SELFIE]');
-    content = parts[0].trim();
-    selfieCaption = parts[1]?.trim() || null;
-
-    // If there is text after [SELFIE], append it to content
-    if (selfieCaption) {
-      content = content + '\n\n' + selfieCaption;
-      selfieCaption = content; // full message becomes the caption context
+  if (actualSelfieAllowed) {
+    const marker = parseSelfieMarker(responseContent);
+    if (marker) {
+      sendSelfie = true;
+      selfieScene = marker.scene;
+      content = marker.cleanContent;
+      // The cleaned reply text is the caption context for the photo.
+      selfieCaption = content || null;
+    }
+  } else {
+    // Safety: strip any stray marker the model emitted while forbidden.
+    const marker = parseSelfieMarker(responseContent);
+    if (marker) {
+      content = marker.cleanContent;
     }
   }
 
   return {
     content,
     selfieCaption,
+    selfieScene,
+    sendSelfie,
     tokensUsed,
     responseTimeMs: Date.now() - startTime,
     crisisSeverity: crisisResult.severity,

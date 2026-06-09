@@ -4,7 +4,8 @@ import { apiSuccess, apiError, withErrorHandler, AppError } from '@/lib/api-util
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { sanitizeString, isValidUUID } from '@/lib/validators';
 import { HEART_CONFIG, HEART_EXHAUSTION_MESSAGES, LLM_CONFIG } from '@/config/constants';
-import { evaluateSelfieTrigger } from '@/lib/chat/selfie-trigger';
+import { evaluateSelfieGuard } from '@/lib/chat/selfie-trigger';
+import { getCharacterScenes } from '@/lib/chat/selfie-context';
 import { generateAIResponse } from '@/lib/chat/ai-service';
 import {
   fetchUserMemories,
@@ -149,12 +150,19 @@ async function handler(req: NextRequest) {
     existingMemories = [];
   }
 
-  // 8. Evaluate selfie trigger
+  // 8. Selfie frequency guard (anti-spam only — the AI decides whether to
+  //    actually send one, based on whether a photo fits the moment).
   const selfieMessages = history.filter((m) => m.selfie_id !== null);
   const lastSelfieIndex = selfieMessages.length > 0
     ? history.length - 1 - history.lastIndexOf(selfieMessages[selfieMessages.length - 1])
     : null;
 
+  const guard = evaluateSelfieGuard({
+    messageCount: conversation.message_count,
+    lastSelfieMessageIndex: lastSelfieIndex,
+  });
+
+  // Re-engagement signal (used by intimacy scoring below).
   const isComeback = (() => {
     if (!conversation.last_user_message_at) return false;
     const lastActive = new Date(conversation.last_user_message_at).getTime();
@@ -162,41 +170,40 @@ async function handler(req: NextRequest) {
     return lastActive < sixHoursAgo;
   })();
 
-  const triggerResult = evaluateSelfieTrigger({
-    userMessage: content,
-    messageCount: conversation.message_count,
-    aiEngagementLevel: conversation.ai_engagement_level,
-    lastSelfieMessageIndex: lastSelfieIndex,
-    isComeback,
-  });
+  // Load the scenes that actually have images, so the AI's [SELFIE:scene]
+  // matches a real photo (caption ↔ image alignment).
+  let availableScenes: string[] = [];
+  if (guard.allowed) {
+    try {
+      availableScenes = await getCharacterScenes(serviceClient, character.id);
+    } catch (err) {
+      console.warn('[Chat] Scene load failed (continuing without):', err);
+    }
+  }
 
-  // Selfies no longer cost hearts — always allow if triggered
-  let willSendSelfie = triggerResult.shouldSendSelfie;
-
-  // 9. Generate AI response
+  // 9. Generate AI response — the AI decides if/what selfie via [SELFIE:scene]
   const aiResult = await generateAIResponse({
     character,
     history,
     userMessage: content,
-    shouldIncludeSelfie: willSendSelfie,
+    selfieAllowed: guard.allowed,
+    availableScenes,
     memoryContext,
     messageCount: conversation.message_count,
     heartsRemaining,
   });
 
-  // Crisis override
-  if (aiResult.crisisSeverity !== 'none') {
-    willSendSelfie = false;
-  }
+  // The AI's choice drives selfie sending (crisis already suppressed upstream).
+  let willSendSelfie = aiResult.sendSelfie && aiResult.crisisSeverity === 'none';
 
-  // 10. If selfie triggered, pick one (no heart cost for selfies)
+  // 10. If the AI chose to send a selfie, pick one matching its scene
   let selfieData: DbSelfie | null = null;
 
   if (willSendSelfie) {
-    const { data: selfieIdResult } = await serviceClient.rpc('pick_selfie', {
+    const { data: selfieIdResult } = await serviceClient.rpc('pick_selfie_by_scene', {
       p_character_id: character.id,
       p_user_id: user.id,
-      p_trigger: triggerResult.triggerType,
+      p_scene: aiResult.selfieScene,
     });
 
     const selfieId = selfieIdResult as string | null;
@@ -254,8 +261,8 @@ async function handler(req: NextRequest) {
       model_used: LLM_CONFIG.MODEL,
       tokens_used: aiResult.tokensUsed,
       response_time_ms: aiResult.responseTimeMs,
-      trigger_type: willSendSelfie ? triggerResult.triggerType : null,
-      trigger_confidence: willSendSelfie ? triggerResult.confidence : null,
+      trigger_type: willSendSelfie ? 'ai_contextual' : null,
+      selfie_scene: willSendSelfie ? aiResult.selfieScene : null,
       gift_request: giftMarker ? giftMarker.giftSlug : null,
     },
   };
