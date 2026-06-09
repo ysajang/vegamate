@@ -159,7 +159,7 @@ export default function SelectPage() {
 
         {/* Character image or placeholder */}
         {char.avatar_url ? (
-          <div className="relative mx-auto h-full w-full max-w-md md:max-w-2xl lg:max-w-3xl">
+          <div className="relative mx-auto h-full w-full max-w-md md:max-w-4xl lg:max-w-5xl">
             <Image
               src={char.avatar_url}
               alt={char.name}
