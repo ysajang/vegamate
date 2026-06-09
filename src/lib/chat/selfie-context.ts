@@ -72,7 +72,7 @@ export async function getCharacterScenes(
     .eq('is_active', true);
 
   if (error || !data) {
-    // Non-fatal: AI can still emit [SELFIE] with no scene -> gacha fallback.
+    // Non-fatal: AI can still emit [SELFIE] with no scene -> rarity-roll fallback.
     return cached?.scenes ?? [];
   }
 

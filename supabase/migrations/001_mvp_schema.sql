@@ -361,7 +361,7 @@ declare
   v_roll float;
   v_selfie_id uuid;
 begin
-  -- Gacha roll for rarity
+  -- Rarity roll (weighted random)
   v_roll := random();
   v_rarity := case
     when v_roll < 0.02 then 'legendary'
