@@ -6,8 +6,17 @@ export const APP_CONFIG = {
 
 // ── Heart system (replaces credits) ─────────────────────────
 export const HEART_CONFIG = {
-  /** Initial hearts for new signups (via handle_new_user trigger) */
-  SIGNUP_BONUS: 5,
+  /**
+   * Initial hearts for new signups (via handle_new_user trigger).
+   * Sized so a new user can get FULLY into their first session without hitting
+   * a paywall: enough turns to learn the character, trigger 1–2 memory
+   * extractions (5 turns each), and naturally receive a selfie — i.e. actually
+   * experience the product before any monetization pressure. Day-2+ pressure
+   * comes from the daily-claim schedule (unchanged).
+   * NOTE: provisional. Re-tune against real-user retention/conversion data once
+   * there is traffic — do not micro-optimize this number before then.
+   */
+  SIGNUP_BONUS: 35,
   /** Hearts consumed per chat turn (user message -> AI response) */
   COST_PER_TURN: 1,
   /** Proactive messages / selfies do NOT consume hearts */
