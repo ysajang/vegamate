@@ -7,6 +7,8 @@ import { CharacterAvatar } from '@/components/common';
 interface ChatHeaderProps {
   characterName: string;
   characterAvatar: string;
+  /** When set, tapping the avatar/name opens the "Our Story" album. */
+  characterId?: string;
   /** Accent color CSS value — defaults to Miku rose */
   accentColor?: string;
   creditsRemaining?: number | null;
@@ -15,6 +17,7 @@ interface ChatHeaderProps {
 export function ChatHeader({
   characterName,
   characterAvatar,
+  characterId,
   accentColor = 'var(--vm-rose)',
 }: ChatHeaderProps) {
   const router = useRouter();
@@ -34,31 +37,36 @@ export function ChatHeader({
         <ArrowLeft className="size-[18px]" />
       </button>
 
-      {/* Avatar + online */}
-      <CharacterAvatar
-        src={characterAvatar}
-        name={characterName}
-        size={40}
-        accentColor={accentColor}
-        showOnline
-        glow
-      />
-
-      {/* Name + status */}
-      <div className="flex-1">
-        <p
-          className="text-[16px] font-semibold leading-tight"
-          style={{ color: 'var(--vm-text-primary)' }}
-        >
-          {characterName}
-        </p>
-        <p
-          className="text-xs font-medium"
-          style={{ color: 'var(--vm-online)' }}
-        >
-          online now
-        </p>
-      </div>
+      {/* Avatar + name — tap to open the relationship album */}
+      <button
+        onClick={() => characterId && router.push(`/memories/${characterId}`)}
+        disabled={!characterId}
+        className="flex flex-1 items-center gap-3 text-left"
+        aria-label={`Open your story with ${characterName}`}
+      >
+        <CharacterAvatar
+          src={characterAvatar}
+          name={characterName}
+          size={40}
+          accentColor={accentColor}
+          showOnline
+          glow
+        />
+        <div className="flex-1">
+          <p
+            className="text-[16px] font-semibold leading-tight"
+            style={{ color: 'var(--vm-text-primary)' }}
+          >
+            {characterName}
+          </p>
+          <p
+            className="text-xs font-medium"
+            style={{ color: 'var(--vm-online)' }}
+          >
+            online now
+          </p>
+        </div>
+      </button>
     </header>
   );
 }

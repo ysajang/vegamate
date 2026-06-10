@@ -240,6 +240,7 @@ export default function ChatPage({ params }: ChatPageProps) {
       <ChatHeader
         characterName={character.name}
         characterAvatar={character.avatar_url}
+        characterId={character.id}
         accentColor={accentColor}
       />
 
