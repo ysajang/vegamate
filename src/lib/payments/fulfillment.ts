@@ -7,6 +7,7 @@
  * hearts can never be double-credited.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { sendGiftReaction } from '@/lib/chat/gift-reaction';
 
 export interface GiftFulfillResult {
   ok: boolean;
@@ -81,6 +82,16 @@ export async function fulfillGiftTransaction(
   console.log(
     `[Fulfill] Gift completed: tx=${giftTxId} user=${tx.user_id} hearts=+${tx.hearts_granted} balance=${newBalance}`
   );
+
+  // Post-fulfillment side effect (payment logic above is untouched):
+  // the character reacts to the received gift in-conversation. Only the call
+  // that performed the actual pending→completed transition reaches this line,
+  // and sendGiftReaction is itself idempotent on gift_tx_id. Non-fatal.
+  try {
+    await sendGiftReaction(serviceClient, giftTxId);
+  } catch (err) {
+    console.warn('[Fulfill] Gift reaction failed (non-critical):', err);
+  }
 
   return { ok: true, newBalance: Number(newBalance) };
 }
