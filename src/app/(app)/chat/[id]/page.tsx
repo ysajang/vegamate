@@ -10,7 +10,6 @@ import { ChatHeader } from '@/components/chat/chat-header';
 import { CharacterAvatar, TypingIndicator } from '@/components/common';
 import { GiftSheet } from '@/components/chat/gift-sheet';
 import { UpgradePrompt } from '@/components/chat/upgrade-prompt';
-import { HeartClaimPopup } from '@/components/chat/heart-claim-popup';
 import type { DbCharacter } from '@/types';
 
 interface ChatPageProps {
@@ -214,11 +213,6 @@ export default function ChatPage({ params }: ChatPageProps) {
     }
   }, [heartsExhausted]);
 
-  // Handle heart claim
-  const handleHeartClaimed = useCallback((_amount: number, _balance: number) => {
-    // Hearts balance will be refreshed on next send
-  }, []);
-
   // Determine character accent color
   const accentColor = character?.slug === 'ren'
     ? 'var(--vm-cool)'
@@ -412,9 +406,6 @@ export default function ChatPage({ params }: ChatPageProps) {
         characterId={character.id}
         exhaustionMessage={exhaustionMessage}
       />
-
-      {/* Daily heart claim popup */}
-      <HeartClaimPopup onClaimed={handleHeartClaimed} />
     </main>
   );
 }

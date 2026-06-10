@@ -132,15 +132,30 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
     };
   }, [conversationId]);
 
-  // Load hearts balance
+  // Load hearts balance (internal accounting only — never rendered to the user).
+  // Daily hearts are auto-claimed silently so the grant keeps working
+  // without any currency-facing UI.
   useEffect(() => {
     async function loadHearts() {
       try {
         const res = await fetch('/api/hearts');
         const json = await res.json();
-        if (json.success) {
-          setHeartsRemaining(json.data.balance);
+        if (!json.success) return;
+
+        if (json.data.can_claim_daily) {
+          try {
+            const claimRes = await fetch('/api/hearts/daily', { method: 'POST' });
+            const claimJson = await claimRes.json();
+            if (claimJson.success && typeof claimJson.data?.balance === 'number') {
+              setHeartsRemaining(claimJson.data.balance);
+              return;
+            }
+          } catch {
+            // Silent — fall through to GET balance
+          }
         }
+
+        setHeartsRemaining(json.data.balance);
       } catch {
         // Silent fail
       }

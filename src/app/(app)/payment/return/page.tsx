@@ -44,9 +44,9 @@ function ReturnContent() {
           const json = await res.json();
           if (!stopped) {
             if (json.success && (json.data?.completed || json.data?.already_completed)) {
-              setDetail(
-                json.data?.hearts_granted ? `+${json.data.hearts_granted} hearts added` : ''
-              );
+              // Internal hearts accounting stays server-side; the user only
+              // sees the gift framing (currency units never surface).
+              setDetail('Your gift has been delivered 💝');
               setPhase('success');
             } else {
               setPhase('error');
