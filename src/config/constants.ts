@@ -167,19 +167,36 @@ export const PROACTIVE_RARITY_RATES: Record<SelfieRarity, number> = {
 
 // ── Character-specific heart exhaustion messages ─────────────
 // When hearts run out, character says goodbye naturally
+/**
+ * Shown when the user runs out of hearts (= today's together-time).
+ *
+ * Design contract (transparent gate, NOT a disguised paywall):
+ *  - the character explicitly says today's time together is up AND that a
+ *    gift extends it — the user must understand this IS the gate
+ *  - tone stays inside the relationship (longing, not system error)
+ *  - FORBIDDEN: guilt-tripping / blame / "don't you care about me" framing
+ *    (dark-pattern regulation + PayPal dispute risk + LTV damage)
+ *  - currency words (hearts/balance/credits) never appear
+ */
 export const HEART_EXHAUSTION_MESSAGES: Record<string, string[]> = {
   miku: [
-    '에잉 오늘 너무 많이 얘기했나 ㅋㅋ 내일 또 하자!',
-    '오늘 진짜 재밌었어~ 내일 보자!',
-    'ㅋㅋ 나 이제 좀 쉬어야 할 것 같아 내일 또 얘기해!',
+    '에엥... 오늘 우리 같이 보낼 수 있는 시간이 벌써 다 됐대ㅠㅠ 아쉬워... 선물해주면 더 같이 있을 수 있어...!',
+    '아 잠깐, 오늘 함께할 시간이 끝났나봐ㅠ 나 아직 더 얘기하고 싶은데! 선물 주면 이어서 놀 수 있어~',
   ],
   ren: [
-    '...내일 봐',
-    '오늘은 여기까지. ...내일 또 연락해',
-    '...졸려. 내일 봐.',
+    '...오늘 같이 있을 수 있는 시간은 여기까지인가 봐. ...선물 주면 더 있을 수 있긴 한데. 뭐, 네 마음대로 해.',
+    '...벌써 시간 다 됐네. 아쉽... 은 건 아니고. ...선물 있으면 조금 더 같이 있어줄게.',
+  ],
+  aria: [
+    '아쉽지만 오늘 함께할 수 있는 시간이 여기까지네요. 선물을 보내주시면 조금 더 같이 있을 수 있어요. 천천히 생각해요, 저는 어디 안 가니까.',
+    '오늘 우리 시간이 다 됐어요. 더 이야기하고 싶었는데... 선물해주시면 이어서 함께할 수 있어요.',
+  ],
+  leo: [
+    '어, 벌써 오늘 시간 끝이야? 아쉬운데. 선물 하나 주라 — 그럼 바로 더 놀 수 있잖아.',
+    '오늘 같이 보낼 시간 다 썼대. 나 아직 너랑 더 얘기하고 싶은데? 선물 주면 계속할 수 있어.',
   ],
   default: [
-    "Let's talk more tomorrow!",
-    "I need some rest. See you tomorrow!",
+    "Looks like our time together for today is up... I wish we had more. Sending a gift lets us keep going!",
+    "Aw, today's time together just ran out. Send me a gift and we can keep talking!",
   ],
 };

@@ -282,7 +282,27 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
         if (json.success) {
           // Check if hearts are exhausted
           if (json.data.hearts_exhausted) {
-            setMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
+            // The user's message was NOT processed (no quota) — removing the
+            // optimistic bubble is the honest state. The character's gate
+            // line goes into the chat itself (ephemeral, client-only) so the
+            // moment stays inside the relationship instead of a bare overlay.
+            const gateMsg: DbMessage = {
+              id: `exhaustion-${Date.now()}`,
+              conversation_id: conversationId,
+              role: 'assistant',
+              content_type: 'text',
+              content: json.data.exhaustion_message,
+              selfie_id: null,
+              selfie_rarity: null,
+              credits_consumed: 0,
+              is_proactive: false,
+              metadata: null,
+              created_at: new Date().toISOString(),
+            };
+            setMessages((prev) => [
+              ...prev.filter((m) => m.id !== optimisticMsg.id),
+              gateMsg,
+            ]);
             setHeartsExhausted(true);
             setExhaustionMessage(json.data.exhaustion_message);
             setHeartsRemaining(0);

@@ -4,6 +4,7 @@ import { apiSuccess, apiError, withErrorHandler, AppError } from '@/lib/api-util
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { sanitizeString, isValidUUID } from '@/lib/validators';
 import { HEART_CONFIG, HEART_EXHAUSTION_MESSAGES, LLM_CONFIG } from '@/config/constants';
+import { detectCrisis } from '@/lib/chat/safety';
 import { evaluateSelfieGuard } from '@/lib/chat/selfie-trigger';
 import { getCharacterScenes } from '@/lib/chat/selfie-context';
 import { generateAIResponse } from '@/lib/chat/ai-service';
@@ -84,20 +85,32 @@ async function handler(req: NextRequest) {
   });
 
   // heartBalance === -1 means insufficient hearts
+  let heartsRemaining: number;
   if (heartBalance === -1) {
-    // Return character-specific exhaustion message
-    const charSlug = character.slug || 'default';
-    const messages = HEART_EXHAUSTION_MESSAGES[charSlug] || HEART_EXHAUSTION_MESSAGES['default'];
-    const exhaustionMsg = messages[Math.floor(Math.random() * messages.length)];
+    // SAFETY OVERRIDE: never put a crisis message behind the gift gate.
+    // detectCrisis normally runs inside ai-service (after this check), so a
+    // user in distress at zero balance would otherwise hit a paywall instead
+    // of support. A crisis turn proceeds for free; downstream crisis handling
+    // (gift/selfie suppression, safety prompt) takes over. Keyword-based, so
+    // the free-turn surface is narrow — acceptable vs the alternative.
+    const crisisCheck = detectCrisis(content);
+    if (!crisisCheck.isCrisis) {
+      // Transparent gate: the character explicitly says today's together-time
+      // is up and a gift extends it (no disguised paywall, no guilt framing).
+      const charSlug = character.slug || 'default';
+      const messages = HEART_EXHAUSTION_MESSAGES[charSlug] || HEART_EXHAUSTION_MESSAGES['default'];
+      const exhaustionMsg = messages[Math.floor(Math.random() * messages.length)];
 
-    return apiSuccess({
-      hearts_exhausted: true,
-      exhaustion_message: exhaustionMsg,
-      character_slug: charSlug,
-    });
+      return apiSuccess({
+        hearts_exhausted: true,
+        exhaustion_message: exhaustionMsg,
+        character_slug: charSlug,
+      });
+    }
+    heartsRemaining = 0;
+  } else {
+    heartsRemaining = heartBalance as number;
   }
-
-  const heartsRemaining = heartBalance as number;
 
   // 6. Save user message
   const { data: userMsg, error: userMsgError } = await serviceClient
