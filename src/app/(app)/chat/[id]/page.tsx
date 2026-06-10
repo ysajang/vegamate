@@ -404,6 +404,7 @@ export default function ChatPage({ params }: ChatPageProps) {
           clearExhaustion();
         }}
         characterId={character.id}
+        characterName={character.name}
         exhaustionMessage={exhaustionMessage}
       />
     </main>

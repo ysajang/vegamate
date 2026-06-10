@@ -264,7 +264,7 @@ export function MessageBubble({
 
         {/* Inline gift button — shown when character requests a gift */}
         {!isUser && giftSlug && characterId && (
-          <GiftButtonLazy giftSlug={giftSlug} characterId={characterId} />
+          <GiftButtonLazy giftSlug={giftSlug} characterId={characterId} characterName={characterName} />
         )}
 
         {/* Selfie image */}
@@ -377,10 +377,11 @@ export function MessageBubble({
 }
 
 /** Lazy-loaded gift button to avoid importing in every bubble */
-function GiftButtonLazy({ giftSlug, characterId }: { giftSlug: string; characterId: string }) {
+function GiftButtonLazy({ giftSlug, characterId, characterName }: { giftSlug: string; characterId: string; characterName?: string }) {
   const [GiftButton, setGiftButton] = useState<React.ComponentType<{
     giftSlug: string;
     characterId: string;
+    characterName?: string;
   }> | null>(null);
 
   useState(() => {
@@ -390,5 +391,5 @@ function GiftButtonLazy({ giftSlug, characterId }: { giftSlug: string; character
   });
 
   if (!GiftButton) return null;
-  return <GiftButton giftSlug={giftSlug} characterId={characterId} />;
+  return <GiftButton giftSlug={giftSlug} characterId={characterId} characterName={characterName} />;
 }

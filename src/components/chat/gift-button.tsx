@@ -6,6 +6,8 @@ import type { DbGift } from '@/types';
 interface GiftButtonProps {
   giftSlug: string;
   characterId: string;
+  /** Character display name — payment moment is framed as "Gift for {name}". */
+  characterName?: string;
   onPurchaseStart?: () => void;
   onPurchaseComplete?: () => void;
 }
@@ -13,6 +15,7 @@ interface GiftButtonProps {
 export function GiftButton({
   giftSlug,
   characterId,
+  characterName,
   onPurchaseStart,
   onPurchaseComplete,
 }: GiftButtonProps) {
@@ -84,7 +87,11 @@ export function GiftButton({
     >
       <span className="text-base">{gift.emoji}</span>
       <span>
-        {loading ? 'Opening...' : `${gift.name} $${gift.price_usd}`}
+        {loading
+          ? 'Opening...'
+          : characterName
+            ? `Gift for ${characterName} — ${gift.name} $${Number(gift.price_usd).toFixed(2)}`
+            : `${gift.name} $${Number(gift.price_usd).toFixed(2)}`}
       </span>
     </button>
   );

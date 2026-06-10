@@ -15,6 +15,8 @@ interface GiftSheetProps {
   isOpen: boolean;
   onClose: () => void;
   characterId: string;
+  /** Character display name — the sheet is framed as gifting THIS character. */
+  characterName?: string;
   exhaustionMessage?: string | null;
 }
 
@@ -22,6 +24,7 @@ export function GiftSheet({
   isOpen,
   onClose,
   characterId,
+  characterName,
   exhaustionMessage,
 }: GiftSheetProps) {
   const [gifts, setGifts] = useState<GiftItem[]>([]);
@@ -118,11 +121,19 @@ export function GiftSheet({
         )}
 
         <h3
-          className="mb-4 text-center text-[15px] font-semibold"
+          className="mb-1 text-center text-[15px] font-semibold"
           style={{ color: 'var(--vm-text-primary)' }}
         >
-          Send a gift 🎁
+          {characterName ? `Gift for ${characterName} 🎁` : 'Send a gift 🎁'}
         </h3>
+        {/* Transparent causality: a gift = more time together. The internal
+            currency conversion is never shown — only the relational effect. */}
+        <p
+          className="mb-4 text-center text-[12px]"
+          style={{ color: 'var(--vm-text-tertiary)' }}
+        >
+          A gift means more time together
+        </p>
 
         {/* Gift grid */}
         <div className="grid grid-cols-3 gap-2.5">
@@ -148,7 +159,7 @@ export function GiftSheet({
                 className="text-[11px]"
                 style={{ color: 'var(--vm-purple-soft)' }}
               >
-                {loadingSlug === gift.slug ? '...' : `$${gift.price_usd}`}
+                {loadingSlug === gift.slug ? '...' : `$${Number(gift.price_usd).toFixed(2)}`}
               </span>
             </button>
           ))}
