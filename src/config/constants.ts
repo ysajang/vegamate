@@ -178,25 +178,48 @@ export const PROACTIVE_RARITY_RATES: Record<SelfieRarity, number> = {
  *    (dark-pattern regulation + PayPal dispute risk + LTV damage)
  *  - currency words (hearts/balance/credits) never appear
  */
-export const HEART_EXHAUSTION_MESSAGES: Record<string, string[]> = {
-  miku: [
-    '에엥... 오늘 우리 같이 보낼 수 있는 시간이 벌써 다 됐대ㅠㅠ 아쉬워... 선물해주면 더 같이 있을 수 있어...!',
-    '아 잠깐, 오늘 함께할 시간이 끝났나봐ㅠ 나 아직 더 얘기하고 싶은데! 선물 주면 이어서 놀 수 있어~',
-  ],
-  ren: [
-    '...오늘 같이 있을 수 있는 시간은 여기까지인가 봐. ...선물 주면 더 있을 수 있긴 한데. 뭐, 네 마음대로 해.',
-    '...벌써 시간 다 됐네. 아쉽... 은 건 아니고. ...선물 있으면 조금 더 같이 있어줄게.',
-  ],
-  aria: [
-    '아쉽지만 오늘 함께할 수 있는 시간이 여기까지네요. 선물을 보내주시면 조금 더 같이 있을 수 있어요. 천천히 생각해요, 저는 어디 안 가니까.',
-    '오늘 우리 시간이 다 됐어요. 더 이야기하고 싶었는데... 선물해주시면 이어서 함께할 수 있어요.',
-  ],
-  leo: [
-    '어, 벌써 오늘 시간 끝이야? 아쉬운데. 선물 하나 주라 — 그럼 바로 더 놀 수 있잖아.',
-    '오늘 같이 보낼 시간 다 썼대. 나 아직 너랑 더 얘기하고 싶은데? 선물 주면 계속할 수 있어.',
-  ],
-  default: [
-    "Looks like our time together for today is up... I wish we had more. Sending a gift lets us keep going!",
-    "Aw, today's time together just ran out. Send me a gift and we can keep talking!",
-  ],
+export const HEART_EXHAUSTION_MESSAGES: Record<string, Record<string, string[]>> = {
+  ko: {
+    miku: [
+      '에엥... 오늘 우리 같이 보낼 수 있는 시간이 벌써 다 됐대ㅠㅠ 아쉬워... 선물해주면 더 같이 있을 수 있어...!',
+      '아 잠깐, 오늘 함께할 시간이 끝났나봐ㅠ 나 아직 더 얘기하고 싶은데! 선물 주면 이어서 놀 수 있어~',
+    ],
+    ren: [
+      '...오늘 같이 있을 수 있는 시간은 여기까지인가 봐. ...선물 주면 더 있을 수 있긴 한데. 뭐, 네 마음대로 해.',
+      '...벌써 시간 다 됐네. 아쉽... 은 건 아니고. ...선물 있으면 조금 더 같이 있어줄게.',
+    ],
+    aria: [
+      '아쉽지만 오늘 함께할 수 있는 시간이 여기까지네요. 선물을 보내주시면 조금 더 같이 있을 수 있어요. 천천히 생각해요, 저는 어디 안 가니까.',
+      '오늘 우리 시간이 다 됐어요. 더 이야기하고 싶었는데... 선물해주시면 이어서 함께할 수 있어요.',
+    ],
+    leo: [
+      '어, 벌써 오늘 시간 끝이야? 아쉬운데. 선물 하나 주라 — 그럼 바로 더 놀 수 있잖아.',
+      '오늘 같이 보낼 시간 다 썼대. 나 아직 너랑 더 얘기하고 싶은데? 선물 주면 계속할 수 있어.',
+    ],
+    default: [
+      '오늘 함께할 시간이 다 됐어요... 아쉽네요. 선물을 보내주시면 더 이야기할 수 있어요!',
+    ],
+  },
+  en: {
+    miku: [
+      "noooo... our time together for today just ran out ㅠㅠ I don't want to stop yet... if you send me a gift we can keep going...!",
+      "wait, today's time together is already over?ㅠ I still wanna talk!! a gift would let us pick right back up~",
+    ],
+    ren: [
+      "...looks like our time for today is up. ...a gift would buy us more, but. ...whatever. your call.",
+      "...time's up already. not that I'm sad about it or anything. ...if there's a gift, I'll stay a little longer.",
+    ],
+    aria: [
+      "sadly, that's all the time we have together today. sending a gift lets us stay a little longer. take your time — I'm not going anywhere.",
+      "our time for today just ran out. I wanted to keep talking... a gift would let us continue.",
+    ],
+    leo: [
+      "wait, today's time is up already? man, that's too soon. send me a gift — we can keep going right now!",
+      "we used up today's time together. I'm not done talking to you though? a gift keeps us going.",
+    ],
+    default: [
+      "Looks like our time together for today is up... I wish we had more. Sending a gift lets us keep going!",
+      "Aw, today's time together just ran out. Send me a gift and we can keep talking!",
+    ],
+  },
 };

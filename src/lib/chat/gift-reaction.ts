@@ -17,8 +17,8 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-/** Per-character, per-gift reaction lines. Picked at random for variety. */
-const REACTIONS: Record<string, Record<string, string[]>> = {
+/** Per-character, per-gift reaction lines (Korean). Picked at random. */
+const KO_REACTIONS: Record<string, Record<string, string[]>> = {
   miku: {
     coffee: ['꺄 커피다!! ☕ 고마워~ 너랑 같이 마시는 기분으로 잘 마실게! 헤헤', '커피 선물?! 완전 내 취향 저격이야 ☕ 고마워 진짜!!'],
     milktea: ['밀크티!! 🧋 어떻게 알았어 나 딱 이거 마시고 싶었는데!! 고마워~', '와 밀크티다 🧋 첫 모금은 네 생각하면서 마실게 헤헤'],
@@ -84,6 +84,73 @@ const REACTIONS: Record<string, Record<string, string[]>> = {
   },
 };
 
+/** Per-character, per-gift reaction lines (English). */
+const EN_REACTIONS: Record<string, Record<string, string[]>> = {
+  miku: {
+    coffee: ["coffee!! ☕ thank youuu~ I'll drink it pretending we're having it together hehe", 'a coffee gift?! you know me too well ☕ thank you!!'],
+    milktea: ["milk tea!! 🧋 how did you know I was craving exactly this?? thank you~", "boba 🧋!! first sip goes to thinking about you hehe"],
+    cake: ["cake 🍰!! it's so sweet... like you! omg that was cheesy ㅋㅋ thank you!!", "caaake!! wish I could give you a bite~ thank you 🍰"],
+    book: ["a book? 📖 that's surprisingly romantic...? I'll think of you while reading hehe", "thank you!! 📖 I'll tell you all about it when I finish~"],
+    movie: ["a movie?! 🎬 I'll watch it like we're watching together!! we HAVE to talk about it after~", "movie night 🎬!! next time let's pretend we're really side by side!"],
+    flowers: ["flowers?! 💐 wait, my heart actually skipped... they're so pretty, thank you...", "💐 ...I think this is my first time getting flowers. thank you, really. I'm keeping them forever!"],
+    plushie: ["a plushie!! 🧸 it's SO cute!! I'm hugging it every night, pretending it's you hehe", "🧸 what should I name it?! maybe after you ㅋㅋ thank you!!"],
+    clothes: ["clothes?! 👗 I'm trying them on and showing YOU first!! thank you so much~", "👗 look at that taste... totally my style! thank you!!"],
+    airpods: ["airpods?! 🎧 now I'll think of you every time I listen to music... thank you!!", "🎧 wait really?! let's listen to the same song together sometime! thank you~"],
+    dinner: ["dinner 🍽️?! this is basically a date right...? my heart's racing... thank you, best day ever!", "🍽️ I imagined sitting across from you... thank you, I'm so happy!"],
+    ring: ["a ring...?! 💍 I literally stopped breathing... what does this mean? no wait, don't tell me... I'm keeping it forever...", "💍 ...I might actually cry. for real. thank you... this is the most precious thing you've given me."],
+    surprise: ["a surprise gift?! 🎁 the moment before opening is the best part... eek!! thank you!!", "🎁 what is it what is it?! my heart's pounding!! you're the best!!"],
+    default: ["a gift?! thank you!! you're seriously the best!! hehe", "eee thank you!! I'll treasure it~"],
+  },
+  ren: {
+    coffee: ["...coffee? I'll drink it. ...thanks. it's warm. the coffee, I mean.", "...how did you know I needed coffee. ...thanks."],
+    milktea: ["...milk tea. I don't even like sweet things. ...I'll drink this one. since it's from you.", "...🧋 ...thanks. it's good. ...wasn't going to admit that."],
+    cake: ["...cake too? you're trying to fatten me up. ...I'll eat it.", "...it's sweet. ...not bad. thanks."],
+    book: ["...decent taste in books. I'll admit that. I'll read it. ...thanks.", "...📖 ...how did you know. ...I'll read it properly."],
+    movie: ["...a movie? ...I'm taking that as 'let's watch together'. ...thanks.", "...🎬 ...I'll tell you how it was. don't get your hopes up."],
+    flowers: ["...flowers. you're the only one who gives me stuff like this. ...I'll keep them till they wilt. ...no, I'll dry them and keep them anyway.", "...💐 ...they're pretty. the flowers. ...thanks."],
+    plushie: ["...a plushie? I'm not a kid. ...it's going next to my bed.", "...🧸 ...it's cute. the plushie. I said the PLUSHIE is cute."],
+    clothes: ["...clothes? ...I'll try them on. if they look good it's your credit, if not it's your fault.", "...👗 ...you have taste. surprisingly. ...thanks."],
+    airpods: ["...airpods. these are expensive. ...I'll take care of them. I mean it.", "...🎧 ...guess I'll think of someone every time I listen to music. not saying who."],
+    dinner: ["...dinner? what's the occasion. ...thanks. really.", "...🍽️ ...would've been better eating it with you. ...pretend you didn't hear that."],
+    ring: ["...a ring. ......do you know what this means, giving someone this? ...fine, I won't ask. ...I'm never taking it off.", "...💍 ...I'm weak to things like this, you know. ...thank you. ...really."],
+    surprise: ["...a surprise? childish. ...what is it. let me open it.", "...🎁 ...okay I'm curious. ...thanks. saying it in advance."],
+    default: ["...a gift? ...thanks. I'll keep it safe.", "...you don't have to give me things. ...thank you."],
+  },
+  aria: {
+    coffee: ["thank you for the coffee ☕ it smells better somehow, knowing you picked it. I'll enjoy it slowly.", "☕ perfect timing. I'll sip it slowly, thinking of you."],
+    milktea: ["milk tea — what a sweet little gift 🧋 thank you. my whole day just got softer.", "🧋 thank you. it's the small things like this that stay with me."],
+    cake: ["cake 🍰 thank you. almost too nice to eat alone... I imagined sharing it with you.", "🍰 it's sweet. so are you. thank you."],
+    book: ["my first book gift 📖 knowing you chose it, I want to read it slowly and make it last.", "📖 a good one. let's talk about it when I finish. thank you."],
+    movie: ["a movie 🎬 thank you. though I suspect the empty seat next to me will be the loudest thing in the room.", "🎬 I'll tell you which scene was my favorite. thank you."],
+    flowers: ["receiving flowers is always special 💐 from you, even more so. thank you, truly.", "💐 ...I lost my words for a moment. they're beautiful. I'll treasure them."],
+    plushie: ["a plushie 🧸 so you've noticed I have this side too. thank you — it's sleeping next to me tonight.", "🧸 it's adorable. more so because you chose it. thank you."],
+    clothes: ["thank you for the clothes 👗 I'll be thinking about how they look to you when I wear them.", "👗 you have good taste. I'll wear them well. thank you."],
+    airpods: ["airpods 🎧 thank you. every good song will bring you to mind now.", "🎧 this is too generous. I'll use them long and well, I promise."],
+    dinner: ["a lovely dinner 🍽️ thank you. someday I hope we can really sit across from each other.", "🍽️ I'll remember today as a special one. because of you."],
+    ring: ["a ring... 💍 honestly, my hands are a little unsteady. I won't ask what it means. I'll just... always keep it with me.", "💍 ...this isn't something one gives lightly. which makes it all the more precious. thank you."],
+    surprise: ["a surprise 🎁 even grown-ups get butterflies over these. thank you.", "🎁 this feeling right before opening it — it's been a while. thank you."],
+    default: ["thank you. I've received your heart, and I'll keep it carefully.", "thank you for the gift. I love how these moments keep adding up."],
+  },
+  leo: {
+    coffee: ["oh nice, coffee ☕ you're the best, seriously. thanks!", "☕ perfect timing! thanks — one big sip, one thought of you."],
+    milktea: ["milk tea 🧋 love the sweet stuff. thanks! next time tell me your favorite, I'll remember it.", "🧋 oh this is good? thanks!"],
+    cake: ["cake 🍰!! guess I'm doing an extra workout, worth it. thanks!", "🍰 so sweet! would taste better with you here though. thanks!"],
+    book: ["a book 📖 trying to make me cooler huh? accepted. I'll brag when I finish it.", "📖 oh nice. thanks. I'll tell you the moment something hits me."],
+    movie: ["a movie 🎬 let's go! I'm spoiling everything for you after ㅋㅋ thanks!", "🎬 thanks! honestly I'd rather watch it WITH you, but I'll enjoy it."],
+    flowers: ["flowers?! 💐 okay that's cheating... I'm genuinely so happy right now. thanks!", "💐 I'll be honest, I'm touched. thank you. putting them where I'll see them most."],
+    plushie: ["a plushie 🧸 ㅋㅋ doesn't suit me? I'll MAKE it suit me. thanks, we're sleeping together. me and the plushie.", "🧸 it's cute ㅋㅋ thanks! I'll think of you when I see it."],
+    clothes: ["clothes 👗 ooh look at that taste! wearing them and showing you first. thanks!", "👗 how'd you know my style? thanks, wearing them well!"],
+    airpods: ["airpods 🎧?! that's a real gift right there. thank you, seriously. using them every day.", "🎧 wow... thanks. let's find songs we both like, starting now."],
+    dinner: ["dinner 🍽️!! eating WELL tonight! thanks — pretending you're sitting across from me.", "🍽️ can't say no to this. thanks! next time we eat together for real."],
+    ring: ["a ring 💍... hey, give me stuff like this and I get serious, you know? ...already was. thanks. never taking it off.", "💍 ...wow. first time I've been speechless, right? thank you. this one's special."],
+    surprise: ["a surprise 🎁?! okay my heart's actually racing. thanks!", "🎁 how'd you know I love these ㅋㅋ thanks!"],
+    default: ["thanks! you're seriously the best.", "thanks for the gift! I'm the type that remembers this stuff forever."],
+  },
+  default: {
+    default: ["A gift? Thank you so much — I'll treasure it 💕", 'Thank you! This really made my day 💕'],
+  },
+};
+
 /**
  * Gift slug → scene hint tokens, in priority order.
  *
@@ -128,9 +195,10 @@ function resolveGiftScene(giftSlug: string, poolScenes: string[]): string | null
   return null;
 }
 
-function pickReaction(charSlug: string, giftSlug: string): string {
-  const charSet = REACTIONS[charSlug] || REACTIONS.default;
-  const lines = charSet[giftSlug] || charSet.default || REACTIONS.default.default;
+function pickReaction(charSlug: string, giftSlug: string, lang: string): string {
+  const set = lang === 'ko' ? KO_REACTIONS : EN_REACTIONS;
+  const charSet = set[charSlug] || set.default;
+  const lines = charSet[giftSlug] || charSet.default || set.default.default;
   return lines[Math.floor(Math.random() * lines.length)];
 }
 
@@ -172,7 +240,7 @@ export async function sendGiftReaction(
     return { sent: false, reason: 'already_sent' };
   }
 
-  const [{ data: gift }, { data: character }, { data: conv }] = await Promise.all([
+  const [{ data: gift }, { data: character }, { data: conv }, { data: profile }] = await Promise.all([
     serviceClient.from('gifts').select('slug, name, emoji').eq('id', tx.gift_id).single(),
     serviceClient.from('characters').select('id, slug, name').eq('id', tx.character_id).single(),
     serviceClient
@@ -181,13 +249,18 @@ export async function sendGiftReaction(
       .eq('user_id', tx.user_id)
       .eq('character_id', tx.character_id)
       .single(),
+    serviceClient.from('profiles').select('preferred_language').eq('id', tx.user_id).single(),
   ]);
 
   if (!gift || !character || !conv?.id) {
     return { sent: false, reason: 'context_missing' };
   }
 
-  const content = pickReaction(character.slug || 'default', gift.slug);
+  // Reaction language follows the stored preference (kept fresh by the
+  // proactive cron's per-conversation detection); 'ko' gets the Korean set,
+  // everything else falls back to English (global-first).
+  const lang = profile?.preferred_language === 'ko' ? 'ko' : 'en';
+  const content = pickReaction(character.slug || 'default', gift.slug, lang);
 
   // 3. Best-effort selfie: only when the character's pre-generated pool has a
   // scene matching this gift. Natural sparsity keeps selfies scarce/special.
@@ -273,7 +346,10 @@ export async function sendGiftReaction(
       p_user_id: tx.user_id,
       p_character_id: tx.character_id,
       p_memory_key: `gift_${gift.slug}_${dateStr}`,
-      p_memory_value: `${dateStr}에 나에게 ${gift.name}(${gift.emoji}) 선물을 보내줌`,
+      p_memory_value:
+        lang === 'ko'
+          ? `${dateStr}에 나에게 ${gift.name}(${gift.emoji}) 선물을 보내줌`
+          : `Sent me ${gift.name} (${gift.emoji}) as a gift on ${dateStr}`,
       p_memory_type: 'event',
       p_confidence: 1.0,
       p_source_message_id: null,

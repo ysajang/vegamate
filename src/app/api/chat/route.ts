@@ -97,8 +97,12 @@ async function handler(req: NextRequest) {
     if (!crisisCheck.isCrisis) {
       // Transparent gate: the character explicitly says today's together-time
       // is up and a gift extends it (no disguised paywall, no guilt framing).
+      // Language follows the message that triggered the gate (Hangul -> ko,
+      // anything else -> en) — same mirroring principle as the LLM directive.
+      const gateLang = /[\uAC00-\uD7AF]/.test(content) ? 'ko' : 'en';
       const charSlug = character.slug || 'default';
-      const messages = HEART_EXHAUSTION_MESSAGES[charSlug] || HEART_EXHAUSTION_MESSAGES['default'];
+      const langSet = HEART_EXHAUSTION_MESSAGES[gateLang];
+      const messages = langSet[charSlug] || langSet['default'];
       const exhaustionMsg = messages[Math.floor(Math.random() * messages.length)];
 
       return apiSuccess({
