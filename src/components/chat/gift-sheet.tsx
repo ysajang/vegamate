@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
+import { AgeVerifyInline } from './age-verify-inline';
 
 interface GiftItem {
   id: string;
@@ -29,6 +30,12 @@ export function GiftSheet({
 }: GiftSheetProps) {
   const [gifts, setGifts] = useState<GiftItem[]>([]);
   const [loadingSlug, setLoadingSlug] = useState<string | null>(null);
+  /** Spending-guard outcome that needs user-facing handling. */
+  const [notice, setNotice] = useState<string | null>(null);
+  /** Server said age_gate — show the inline DOB verification. */
+  const [needsAgeVerify, setNeedsAgeVerify] = useState(false);
+  /** Gift the user tried to buy before the age gate, retried after verify. */
+  const [pendingSlug, setPendingSlug] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -49,6 +56,7 @@ export function GiftSheet({
   const handlePurchase = async (slug: string) => {
     if (loadingSlug) return;
     setLoadingSlug(slug);
+    setNotice(null);
 
     try {
       const res = await fetch('/api/gifts/purchase', {
@@ -61,11 +69,29 @@ export function GiftSheet({
       });
 
       const json = await res.json();
-      if (json.success && json.data.checkout_url) {
+
+      if (json.success && json.data?.checkout_url) {
         window.open(json.data.checkout_url, '_blank');
+        return;
       }
+
+      // Spending guard outcomes — previously ignored, which made the buy
+      // button appear dead. Each gets explicit, in-tone handling.
+      if (json.success && json.data?.blocked) {
+        if (json.data.reason === 'age_gate') {
+          setPendingSlug(slug);
+          setNeedsAgeVerify(true);
+        } else if (json.data.reason === 'daily_cap') {
+          setNotice("You've been so generous today 💝 Daily gift limit reached — see you tomorrow!");
+        } else if (json.data.reason === 'cooldown') {
+          setNotice('Just a moment between gifts — please try again shortly.');
+        }
+        return;
+      }
+
+      setNotice("Something went wrong starting the payment. Please try again.");
     } catch {
-      // Silent
+      setNotice('Network error. Please try again.');
     } finally {
       setLoadingSlug(null);
     }
@@ -106,6 +132,44 @@ export function GiftSheet({
             <X className="size-5" />
           </button>
         </div>
+
+        {/* Spending-guard / error notice */}
+        {notice && (
+          <div
+            className="mb-3 rounded-2xl px-4 py-3 text-center text-[13px]"
+            style={{
+              background: 'rgba(244, 114, 182, 0.08)',
+              color: 'var(--vm-text-secondary)',
+            }}
+          >
+            {notice}
+          </div>
+        )}
+
+        {/* One-time age verification (server-blocked: age_gate) */}
+        {needsAgeVerify && (
+          <div
+            className="mb-4 rounded-2xl px-4 pb-4 pt-1"
+            style={{
+              background: 'rgba(124, 58, 237, 0.08)',
+              border: '1px solid var(--vm-glass-border)',
+            }}
+          >
+            <AgeVerifyInline
+              onVerified={() => {
+                setNeedsAgeVerify(false);
+                const retry = pendingSlug;
+                setPendingSlug(null);
+                if (retry) handlePurchase(retry);
+              }}
+              onMinor={() => {
+                setNeedsAgeVerify(false);
+                setPendingSlug(null);
+                setNotice('Purchases require verified adults (19+).');
+              }}
+            />
+          </div>
+        )}
 
         {/* Exhaustion message */}
         {exhaustionMessage && (

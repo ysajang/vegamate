@@ -34,7 +34,7 @@ export function AgeVerifyInline({
     const m = Number(month);
     const d = Number(day);
     if (m < 1 || m > 12 || d < 1 || d > 31) {
-      setError('생년월일을 다시 확인해 주세요.');
+      setError('Please double-check your birth date.');
       return;
     }
 
@@ -52,7 +52,7 @@ export function AgeVerifyInline({
       const json = await res.json();
 
       if (!res.ok || !json.success) {
-        setError(json.error || '인증에 실패했어요. 다시 시도해 주세요.');
+        setError(json.error || 'Verification failed. Please try again.');
         setSubmitting(false);
         return;
       }
@@ -63,7 +63,7 @@ export function AgeVerifyInline({
         onMinor();
       }
     } catch {
-      setError('네트워크 오류예요. 다시 시도해 주세요.');
+      setError('Network error. Please try again.');
       setSubmitting(false);
     }
   }
@@ -76,7 +76,7 @@ export function AgeVerifyInline({
   return (
     <div className="mt-3">
       <p className="text-[12px]" style={{ color: 'var(--vm-text-secondary)' }}>
-        결제 전 만 19세 이상 인증이 필요해요.
+        A quick one-time age check (19+) is required before purchase.
       </p>
       <div className="mt-2 flex items-end gap-2">
         <input
