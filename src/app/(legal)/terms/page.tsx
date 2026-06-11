@@ -37,11 +37,20 @@ export default function TermsOfServicePage() {
         <h2 className="mb-3 text-lg font-semibold text-foreground">
           2. Eligibility
         </h2>
+        <p className="mb-3">
+          You must be at least 19 years old (or the age of majority in
+          your jurisdiction, if higher) to use the Service. By using
+          the Service, you represent and warrant that you meet this
+          age requirement.
+        </p>
         <p>
-          You must be at least 18 years old to use the Service. By
-          using the Service, you represent and warrant that you meet
-          this age requirement. We reserve the right to terminate
-          accounts of users who do not meet this requirement.
+          Providing a false date of birth or otherwise misrepresenting
+          your age is a material breach of these Terms. We rely on the
+          information you provide; if we determine that you
+          misrepresented your age, we may suspend or terminate your
+          account immediately, and you will not be entitled to any
+          refund for purchases made through the misrepresented
+          account, except where required by applicable law.
         </p>
       </section>
 
@@ -79,9 +88,10 @@ export default function TermsOfServicePage() {
           <li>Unused Hearts do not expire as long as your account remains active</li>
         </ul>
         <p>
-          Payments are processed by Creem, a third-party payment
-          provider. By making a purchase, you also agree to their terms
-          of service.
+          Payments are processed by third-party payment providers
+          (currently PayPal). By making a purchase, you also agree to
+          the applicable provider&apos;s terms of service. Prices are
+          shown in USD and disclosed before every purchase.
         </p>
       </section>
 
