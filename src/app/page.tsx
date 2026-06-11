@@ -1,5 +1,6 @@
 import { PreregisterForm } from '@/components/landing/preregister-form';
 import Image from 'next/image';
+import Link from 'next/link';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -26,6 +27,14 @@ export const metadata: Metadata = {
 export default function LandingPage() {
   return (
     <main className="relative flex min-h-dvh flex-col items-center overflow-hidden bg-[#08080d]">
+
+      {/* Existing-user entry */}
+      <Link
+        href="/login"
+        className="absolute right-4 top-4 z-20 rounded-full border border-white/15 bg-black/40 px-4 py-1.5 text-xs font-medium text-white/80 backdrop-blur-md transition-colors hover:bg-white/10 hover:text-white"
+      >
+        Sign in
+      </Link>
 
       {/* ── HERO: Full-bleed image background with text overlay ── */}
       <section className="relative flex w-full flex-col items-center">
