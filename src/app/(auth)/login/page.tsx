@@ -33,7 +33,7 @@ function LoginContent() {
       <div className="flex flex-col items-center gap-2">
         <h1 className="text-4xl font-bold tracking-tight">{APP_CONFIG.name}</h1>
         <p className="text-sm text-muted-foreground">
-          Collect stunning AI wallpapers
+          Chat with companions who remember you
         </p>
       </div>
 
