@@ -84,16 +84,49 @@ const REACTIONS: Record<string, Record<string, string[]>> = {
   },
 };
 
-/** Gift slug → candidate selfie scenes (matched against the character's pool). */
+/**
+ * Gift slug → scene hint tokens, in priority order.
+ *
+ * Verified against the PRODUCTION selfie_pool scene values (2026-06-11),
+ * e.g. cafe_hoodie / rainy_window_cafe / cherry_blossom_dressup — matching is
+ * bidirectional-substring (same rule as pick_selfie_by_scene step 1c).
+ * Gifts whose theme has no plausible scene for any character (movie,
+ * surprise) are intentionally unmapped → text-only reaction.
+ */
 const GIFT_SCENE_HINTS: Record<string, string[]> = {
-  coffee: ['cafe', 'coffee'],
+  coffee: ['coffee', 'cafe'],
   milktea: ['cafe'],
-  cake: ['cafe', 'dessert', 'bakery'],
-  movie: ['movie', 'cinema', 'home'],
-  flowers: ['park', 'flower', 'outdoor', 'garden'],
-  dinner: ['restaurant', 'dinner', 'date', 'night'],
-  clothes: ['shopping', 'mirror', 'outfit'],
+  cake: ['birthday', 'cafe'],
+  book: ['book', 'library', 'reading'],
+  flowers: ['cherry_blossom', 'garden', 'park'],
+  plushie: ['plushie'],
+  clothes: ['shopping', 'dressup', 'mirror', 'leather_jacket', 'winter_outing'],
+  airpods: ['concert', 'music', 'piano'],
+  dinner: ['cooking', 'night_city'],
+  ring: ['shy'],
 };
+
+/**
+ * Resolve a gift's hint tokens to a CONCRETE scene value present in the
+ * character's active pool. Returning an exact pool value means the
+ * pick_selfie_by_scene RPC resolves at its exact-match step and can never
+ * fall through to its rarity-gacha fallback — which would attach a
+ * thematically unrelated selfie (e.g. a gym photo for a ring) to the
+ * gift reaction.
+ */
+function resolveGiftScene(giftSlug: string, poolScenes: string[]): string | null {
+  const hints = GIFT_SCENE_HINTS[giftSlug];
+  if (!hints) return null;
+  for (const hint of hints) {
+    const h = hint.toLowerCase();
+    const match = poolScenes.find((scene) => {
+      const sc = scene.toLowerCase();
+      return sc.includes(h) || h.includes(sc);
+    });
+    if (match) return match;
+  }
+  return null;
+}
 
 function pickReaction(charSlug: string, giftSlug: string): string {
   const charSet = REACTIONS[charSlug] || REACTIONS.default;
@@ -160,8 +193,7 @@ export async function sendGiftReaction(
   // scene matching this gift. Natural sparsity keeps selfies scarce/special.
   let selfieId: string | null = null;
   let selfieRarity: string | null = null;
-  const sceneHints = GIFT_SCENE_HINTS[gift.slug];
-  if (sceneHints) {
+  if (GIFT_SCENE_HINTS[gift.slug]) {
     try {
       const { data: pool } = await serviceClient
         .from('selfie_pool')
@@ -169,10 +201,10 @@ export async function sendGiftReaction(
         .eq('character_id', character.id)
         .eq('is_active', true);
 
-      const available = new Set(
-        (pool || []).map((r) => (r as { scene: string }).scene).filter(Boolean)
-      );
-      const matched = sceneHints.find((s) => available.has(s));
+      const poolScenes = (pool || [])
+        .map((r) => (r as { scene: string }).scene)
+        .filter(Boolean);
+      const matched = resolveGiftScene(gift.slug, poolScenes);
 
       if (matched) {
         const { data: pickedId } = await serviceClient.rpc('pick_selfie_by_scene', {
