@@ -131,14 +131,14 @@ export default function LandingPage() {
           <span className="bg-gradient-to-r from-fuchsia-400 to-pink-400 bg-clip-text text-transparent"> feels like</span>
         </h2>
 
-        {/* Chat mockup - Kai (morning - clean) */}
+        {/* Chat mockup - Leo (morning - clean) */}
         <div className="flex flex-col gap-2.5 rounded-2xl border border-white/10 bg-[#111118] p-4">
           <div className="flex items-center gap-2.5 border-b border-white/5 pb-3">
             <div className="relative h-8 w-8 overflow-hidden rounded-full">
-              <Image src="/chat-boy-morning.webp" alt="Kai" fill className="object-cover" sizes="32px" />
+              <Image src="/chat-boy-morning.webp" alt="Leo" fill className="object-cover" sizes="32px" />
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-semibold text-white/90">Kai</span>
+              <span className="text-sm font-semibold text-white/90">Leo</span>
               <span className="text-[10px] text-green-400/80">online</span>
             </div>
           </div>
@@ -152,7 +152,7 @@ export default function LandingPage() {
           <div className="flex justify-start">
             <div className="relative w-[200px] overflow-hidden rounded-2xl rounded-bl-md border border-white/10">
               <div className="relative aspect-[3/4] w-full">
-                <Image src="/chat-boy-morning.webp" alt="Kai sent a morning selfie" fill className="object-cover" sizes="200px" />
+                <Image src="/chat-boy-morning.webp" alt="Leo sent a morning selfie" fill className="object-cover" sizes="200px" />
               </div>
             </div>
           </div>
@@ -170,14 +170,14 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* Chat mockup - Luna (cafe - clean) */}
+        {/* Chat mockup - Miku (cafe - clean) */}
         <div className="mt-6 flex flex-col gap-2.5 rounded-2xl border border-white/10 bg-[#111118] p-4">
           <div className="flex items-center gap-2.5 border-b border-white/5 pb-3">
             <div className="relative h-8 w-8 overflow-hidden rounded-full">
-              <Image src="/chat-girl-cafe.webp" alt="Luna" fill className="object-cover" sizes="32px" />
+              <Image src="/chat-girl-cafe.webp" alt="Miku" fill className="object-cover" sizes="32px" />
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-semibold text-white/90">Luna</span>
+              <span className="text-sm font-semibold text-white/90">Miku</span>
               <span className="text-[10px] text-green-400/80">online</span>
             </div>
           </div>
@@ -203,7 +203,7 @@ export default function LandingPage() {
           <div className="flex justify-start">
             <div className="relative w-[200px] overflow-hidden rounded-2xl rounded-bl-md border border-white/10">
               <div className="relative aspect-[3/4] w-full">
-                <Image src="/chat-girl-cafe.webp" alt="Luna sent a cafe selfie" fill className="object-cover" sizes="200px" />
+                <Image src="/chat-girl-cafe.webp" alt="Miku sent a cafe selfie" fill className="object-cover" sizes="200px" />
               </div>
             </div>
           </div>
