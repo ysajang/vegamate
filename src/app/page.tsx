@@ -1,7 +1,15 @@
 import { PreregisterForm } from '@/components/landing/preregister-form';
+import { LaunchCta } from '@/components/landing/launch-cta';
 import Image from 'next/image';
 import Link from 'next/link';
 import type { Metadata } from 'next';
+
+/**
+ * Launch switch: set NEXT_PUBLIC_LAUNCH_MODE=live in Vercel env (+ redeploy)
+ * to swap waitlist capture -> product entry. Any other value keeps waitlist.
+ * Waitlist data (preregistrations table) and /api/preregister stay intact.
+ */
+const IS_LIVE = process.env.NEXT_PUBLIC_LAUNCH_MODE === 'live';
 
 export const metadata: Metadata = {
   title: 'VegaMate — Your AI Companion Sends You Selfies',
@@ -84,6 +92,15 @@ export default function LandingPage() {
             Chat with them. Build a bond. They surprise you with selfies
             — you never know what expression or outfit you&apos;ll get.
           </p>
+
+          {IS_LIVE && (
+            <Link
+              href="/login"
+              className="mt-2 flex items-center justify-center rounded-xl bg-gradient-to-r from-fuchsia-500 to-pink-500 px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-fuchsia-500/25 transition-transform hover:scale-[1.02] active:scale-[0.98]"
+            >
+              Start chatting
+            </Link>
+          )}
         </div>
       </section>
 
@@ -237,7 +254,7 @@ export default function LandingPage() {
 
       {/* ── CTA ── */}
       <section className="relative z-10 mx-auto mt-10 w-full max-w-xl px-5 pb-10 sm:mt-14" id="signup">
-        <PreregisterForm />
+        {IS_LIVE ? <LaunchCta /> : <PreregisterForm />}
       </section>
 
       {/* Footer */}
