@@ -145,7 +145,13 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ received: true, unmatched: true });
       }
 
-      const result = await fulfillGiftTransaction(serviceClient, txId, captureId);
+      // PAYMENT.CAPTURE.COMPLETED resource is the capture itself → amount.value
+      const capturedAmount = (() => {
+        const amt = (resource.amount as Record<string, unknown> | undefined)?.value;
+        return amt != null ? Number(amt) : null;
+      })();
+
+      const result = await fulfillGiftTransaction(serviceClient, txId, captureId, capturedAmount);
       return NextResponse.json({
         received: true,
         fulfilled: result.ok,

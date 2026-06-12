@@ -23,11 +23,12 @@ export interface GiftFulfillResult {
 export async function fulfillGiftTransaction(
   serviceClient: SupabaseClient,
   giftTxId: string,
-  paypalCaptureId: string | null
+  paypalCaptureId: string | null,
+  capturedAmountUsd?: number | null
 ): Promise<GiftFulfillResult> {
   const { data: tx } = await serviceClient
     .from('gift_transactions')
-    .select('id, status, user_id, character_id, hearts_granted')
+    .select('id, status, user_id, character_id, hearts_granted, gift:gifts(price_usd)')
     .eq('id', giftTxId)
     .single();
 
@@ -37,6 +38,28 @@ export async function fulfillGiftTransaction(
 
   if (tx.status === 'completed') {
     return { ok: true, alreadyCompleted: true };
+  }
+
+  // Amount tamper check: the amount PayPal actually captured must match the
+  // server-side price of the gift this tx is for. The buyer approves a
+  // PayPal-hosted order so they cannot alter the amount in the normal flow,
+  // but verifying defends against a forged/mismatched capture being mapped
+  // onto a cheaper tx via custom_id. Skipped only when the caller could not
+  // resolve a captured amount (we then fall back to custom_id trust).
+  if (typeof capturedAmountUsd === 'number' && Number.isFinite(capturedAmountUsd)) {
+    const expected = Number(
+      (tx as unknown as { gift?: { price_usd?: number | string } }).gift?.price_usd
+    );
+    if (Number.isFinite(expected) && Math.abs(capturedAmountUsd - expected) > 0.01) {
+      console.error(
+        `[Fulfill] AMOUNT MISMATCH tx=${giftTxId} expected=$${expected} captured=$${capturedAmountUsd} — refusing to credit`
+      );
+      await serviceClient
+        .from('gift_transactions')
+        .update({ status: 'failed' })
+        .eq('id', tx.id);
+      return { ok: false, error: 'amount_mismatch' };
+    }
   }
 
   // Credit hearts

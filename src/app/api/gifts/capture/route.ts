@@ -73,15 +73,26 @@ async function handler(req: NextRequest) {
   // Capture
   const orders = getOrdersController();
   let captureId: string | null = null;
+  let capturedAmount: number | null = null;
   let captured = false;
+
+  const extractCapture = (result: {
+    purchaseUnits?: Array<{
+      payments?: { captures?: Array<{ id?: string; amount?: { value?: string } }> };
+    }>;
+  }) => {
+    const cap = result.purchaseUnits?.[0]?.payments?.captures?.[0];
+    captureId = cap?.id ?? null;
+    const v = cap?.amount?.value;
+    capturedAmount = v != null ? Number(v) : null;
+  };
 
   try {
     const { result, statusCode } = await orders.captureOrder({ id: orderId });
 
     if (statusCode < 400 && result?.status === 'COMPLETED') {
       captured = true;
-      captureId =
-        result.purchaseUnits?.[0]?.payments?.captures?.[0]?.id ?? null;
+      extractCapture(result);
     } else {
       console.error('[Capture] Unexpected capture result:', statusCode, result?.status);
     }
@@ -93,8 +104,7 @@ async function handler(req: NextRequest) {
         const { result } = await orders.getOrder({ id: orderId });
         if (result?.status === 'COMPLETED') {
           captured = true;
-          captureId =
-            result.purchaseUnits?.[0]?.payments?.captures?.[0]?.id ?? null;
+          extractCapture(result);
         }
       } catch (verifyErr) {
         console.error('[Capture] Verify after ALREADY_CAPTURED failed:', verifyErr);
@@ -108,7 +118,7 @@ async function handler(req: NextRequest) {
     throw new AppError('Payment capture failed', 402);
   }
 
-  const fulfill = await fulfillGiftTransaction(serviceClient, txId, captureId);
+  const fulfill = await fulfillGiftTransaction(serviceClient, txId, captureId, capturedAmount);
 
   if (!fulfill.ok) {
     // Money captured but credit failed — log loudly; webhook retry will heal.
