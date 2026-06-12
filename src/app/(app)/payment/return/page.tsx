@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { FeedbackTrigger } from '@/components/common';
 
 /**
  * PayPal redirect return page.
@@ -138,6 +139,13 @@ function ReturnContent() {
             If you were charged, your purchase will be confirmed automatically within a few
             minutes. Otherwise, please try again.
           </p>
+          <div className="mt-2">
+            <FeedbackTrigger
+              variant="link"
+              defaultCategory="payment"
+              label="Payment issue? Contact us"
+            />
+          </div>
         </>
       )}
     </div>

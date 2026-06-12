@@ -1,5 +1,5 @@
 import { createServerSupabase } from '@/lib/supabase/server';
-import { BottomNav } from '@/components/common';
+import { BottomNav, FeedbackTrigger } from '@/components/common';
 import { SignOutButton } from './sign-out-button';
 
 export const metadata = { title: 'Settings — VegaMate' };
@@ -51,6 +51,8 @@ export default async function SettingsPage() {
             via {provider}
           </span>
         </section>
+
+        <FeedbackTrigger defaultEmail={user?.email ?? null} />
 
         <SignOutButton />
       </div>
