@@ -9,6 +9,32 @@ import { getOrdersController } from '@/lib/payments/paypal/client';
 import { CheckoutPaymentIntent } from '@paypal/paypal-server-sdk';
 
 /**
+ * Mark a gift tx failed AND release the spend it reserved at intent time.
+ *
+ * check_and_reserve_spend debits the daily cap up-front; if the PayPal flow
+ * never completes (order create error, no approval link, abandoned checkout),
+ * that reservation must be returned or it silently eats the user's $50/day cap
+ * and blocks later legitimate purchases. Single helper so every failure path
+ * releases consistently. Release is same-day, clamped at 0, does NOT reset cooldown.
+ */
+async function failGiftTx(
+  serviceClient: ReturnType<typeof createServiceRoleClient>,
+  txId: string,
+  userId: string,
+  amountUsd: number
+): Promise<void> {
+  await serviceClient.from('gift_transactions').update({ status: 'failed' }).eq('id', txId);
+  try {
+    await serviceClient.rpc('release_reserved_spend', {
+      p_user_id: userId,
+      p_amount_usd: amountUsd,
+    });
+  } catch (err) {
+    console.warn('[Gift] release_reserved_spend failed (non-critical):', err);
+  }
+}
+
+/**
  * Create a checkout for a one-time gift purchase.
  *
  * Provider: PayPal (Orders v2, redirect approval flow) — Creem path kept
@@ -199,7 +225,7 @@ async function createPayPalGiftOrder({
 
     if (statusCode >= 400 || !result?.id) {
       console.error('[Gift] PayPal order create failed:', statusCode, JSON.stringify(result));
-      await serviceClient.from('gift_transactions').update({ status: 'failed' }).eq('id', tx.id);
+      await failGiftTx(serviceClient, tx.id, user.id, gift.price_usd);
       throw new AppError('Payment initiation failed', 500);
     }
 
@@ -209,7 +235,7 @@ async function createPayPalGiftOrder({
 
     if (!approveLink) {
       console.error('[Gift] No approval link in PayPal order:', result.id);
-      await serviceClient.from('gift_transactions').update({ status: 'failed' }).eq('id', tx.id);
+      await failGiftTx(serviceClient, tx.id, user.id, gift.price_usd);
       throw new AppError('Payment initiation failed', 500);
     }
 
@@ -228,7 +254,7 @@ async function createPayPalGiftOrder({
   } catch (err) {
     if (err instanceof AppError) throw err;
     console.error('[Gift] PayPal order creation error:', err);
-    await serviceClient.from('gift_transactions').update({ status: 'failed' }).eq('id', tx.id);
+    await failGiftTx(serviceClient, tx.id, user.id, gift.price_usd);
     throw new AppError('Payment initiation failed', 500);
   }
 }
@@ -245,7 +271,7 @@ async function createCreemGiftCheckout({
 }: {
   serviceClient: ReturnType<typeof createServiceRoleClient>;
   tx: { id: string };
-  gift: { creem_product_id: string | null };
+  gift: { creem_product_id: string | null; price_usd: number };
   giftSlug: string;
   characterId: string;
   user: { id: string };
@@ -287,7 +313,7 @@ async function createCreemGiftCheckout({
     if (!checkoutRes.ok) {
       const errText = await checkoutRes.text().catch(() => 'Unknown error');
       console.error('[Gift] Creem checkout failed:', checkoutRes.status, errText);
-      await serviceClient.from('gift_transactions').update({ status: 'failed' }).eq('id', tx.id);
+      await failGiftTx(serviceClient, tx.id, user.id, gift.price_usd);
       throw new AppError('Payment initiation failed', 500);
     }
 
@@ -306,7 +332,7 @@ async function createCreemGiftCheckout({
   } catch (err) {
     if (err instanceof AppError) throw err;
     console.error('[Gift] Checkout creation error:', err);
-    await serviceClient.from('gift_transactions').update({ status: 'failed' }).eq('id', tx.id);
+    await failGiftTx(serviceClient, tx.id, user.id, gift.price_usd);
     throw new AppError('Payment initiation failed', 500);
   }
 }

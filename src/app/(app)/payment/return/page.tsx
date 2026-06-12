@@ -30,6 +30,15 @@ function ReturnContent() {
 
     async function run() {
       if (cancelled) {
+        // Fire-and-forget: release the reserved spend so an abandoned
+        // checkout doesn't eat the user's daily cap. UI flips regardless.
+        if (type === 'gift' && txId) {
+          fetch('/api/gifts/capture', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ transaction_id: txId, cancelled: true }),
+          }).catch(() => {});
+        }
         setPhase('cancelled');
         return;
       }

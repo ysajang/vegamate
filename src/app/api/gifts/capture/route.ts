@@ -39,11 +39,12 @@ async function handler(req: NextRequest) {
 
   const txId = sanitizeString(body.transaction_id);
   const orderId = sanitizeString(body.order_id);
+  const cancelled = body.cancelled === true;
 
   if (!txId || !isValidUUID(txId)) {
     throw new AppError('Invalid transaction_id');
   }
-  if (!orderId) {
+  if (!cancelled && !orderId) {
     throw new AppError('order_id is required');
   }
 
@@ -52,13 +53,43 @@ async function handler(req: NextRequest) {
   // Ownership + linkage check: tx must belong to caller and match the order id
   const { data: tx } = await serviceClient
     .from('gift_transactions')
-    .select('id, status, user_id, paypal_order_id, hearts_granted')
+    .select('id, status, user_id, paypal_order_id, hearts_granted, gift:gifts(price_usd)')
     .eq('id', txId)
     .single();
 
   if (!tx || tx.user_id !== user.id) {
     throw new AppError('Transaction not found', 404);
   }
+
+  const giftPrice = Number(
+    (tx as unknown as { gift?: { price_usd?: number | string } }).gift?.price_usd ?? 0
+  );
+
+  // Release the up-front spend reservation back to the daily cap. Used on
+  // both explicit cancel and any capture failure so an abandoned checkout
+  // never permanently eats the user's $50/day headroom (revenue leak).
+  const releaseReserve = async () => {
+    if (giftPrice > 0) {
+      try {
+        await serviceClient.rpc('release_reserved_spend', {
+          p_user_id: user.id,
+          p_amount_usd: giftPrice,
+        });
+      } catch (err) {
+        console.warn('[Capture] release_reserved_spend failed (non-critical):', err);
+      }
+    }
+  };
+
+  // Buyer cancelled on PayPal (no capture happened): mark failed + release.
+  if (cancelled) {
+    if (tx.status === 'pending') {
+      await serviceClient.from('gift_transactions').update({ status: 'failed' }).eq('id', tx.id);
+      await releaseReserve();
+    }
+    return apiSuccess({ cancelled: true });
+  }
+
   if (tx.paypal_order_id !== orderId) {
     throw new AppError('Order mismatch', 400);
   }
@@ -115,6 +146,11 @@ async function handler(req: NextRequest) {
   }
 
   if (!captured) {
+    // Capture failed and no money moved → return the reservation.
+    if (tx.status === 'pending') {
+      await serviceClient.from('gift_transactions').update({ status: 'failed' }).eq('id', tx.id);
+      await releaseReserve();
+    }
     throw new AppError('Payment capture failed', 402);
   }
 
