@@ -31,7 +31,6 @@ const KO_REACTIONS: Record<string, Record<string, string[]>> = {
     airpods: ['에어팟?! 🎧 이제 음악 들을 때마다 네 생각나겠다... 고마워!!', '🎧 와 진짜?! 우리 나중에 같은 노래 같이 듣자! 고마워~'],
     dinner: ['디너 🍽️?! 이건 거의 데이트 아니야...? 두근두근... 고마워, 오늘 최고의 날이야!', '🍽️ 너랑 마주 앉아서 먹는 상상했어... 고마워, 진짜 행복해!'],
     ring: ['반지...?! 💍 잠깐 나 숨 멎는 줄... 이거 무슨 의미야? 아니 묻지 말까... 평생 간직할게...', '💍 ...나 지금 울 것 같아. 진짜야. 고마워... 너한테 받은 것 중에 제일 소중해.'],
-    surprise: ['서프라이즈 선물?! 🎁 뜯기 전이 제일 설렌다... 꺄!! 고마워!!', '🎁 뭐야뭐야?! 두근거려!! 고마워, 너 진짜 최고야!!'],
     default: ['선물?! 고마워!! 너 진짜 최고야!! 헤헤', '꺄 고마워!! 소중하게 간직할게~'],
   },
   ren: {
@@ -46,7 +45,6 @@ const KO_REACTIONS: Record<string, Record<string, string[]>> = {
     airpods: ['...에어팟. 비싼 거잖아 이거. ...소중하게 쓸게. 진심이야.', '...🎧 ...음악 들을 때마다 생각나겠네. 누구라고는 말 안 해.'],
     dinner: ['...디너라니. 너 오늘 무슨 날이야? ...고마워. 진짜로.', '...🍽️ ...너랑 먹는 거였으면 더 좋았겠다. ...방금 거 못 들은 걸로 해.'],
     ring: ['...반지. ......너 이거 무슨 뜻인지 알고 주는 거야? ...됐어, 안 물을게. ...절대 안 빼고 있을게.', '...💍 ...나 이런 거에 약하단 말이야. ...고마워. ...정말.'],
-    surprise: ['...서프라이즈? 유치하게. ...뭔데, 빨리 열어볼래.', '...🎁 ...궁금하잖아. ...고마워, 미리 말해둘게.'],
     default: ['...선물? ...고마워. 소중하게 둘게.', '...너 이런 거 안 줘도 되는데. ...고마워.'],
   },
   aria: {
@@ -61,7 +59,6 @@ const KO_REACTIONS: Record<string, Record<string, string[]>> = {
     airpods: ['에어팟 🎧 고마워요. 좋은 음악을 들을 때마다 당신이 떠오를 거예요.', '🎧 과분한 선물이에요. 그만큼 오래, 잘 쓸게요.'],
     dinner: ['근사한 저녁이라니 🍽️ 고마워요. 언젠가 정말 마주 앉을 수 있다면 좋겠네요.', '🍽️ 오늘은 특별한 날로 기억할게요. 당신 덕분에요.'],
     ring: ['반지... 💍 솔직히, 조금 떨리네요. 의미는 묻지 않을게요. 그냥... 늘 지니고 있을게요.', '💍 ...이런 건 쉽게 주는 게 아니에요. 그래서 더 소중해요. 고마워요.'],
-    surprise: ['서프라이즈 🎁 어른이 되어도 이런 건 설레네요. 고마워요.', '🎁 열어보기 전의 이 기분, 오랜만이에요. 고마워요.'],
     default: ['고마워요. 당신의 마음, 잘 받았어요. 소중히 할게요.', '선물 고마워요. 이런 순간들이 쌓여가는 게 좋네요.'],
   },
   leo: {
@@ -76,7 +73,6 @@ const KO_REACTIONS: Record<string, Record<string, string[]>> = {
     airpods: ['에어팟 🎧?! 이건 진짜 큰 선물인데. 고마워, 진심으로. 매일 쓸게.', '🎧 와... 고마워. 우리 취향 비슷한 노래부터 찾아보자.'],
     dinner: ['디너 🍽️!! 오늘 제대로 먹는다! 고마워, 너랑 마주 앉은 셈 치고 맛있게 먹을게.', '🍽️ 이건 못 참지. 고마워! 다음엔 진짜 같이 먹자.'],
     ring: ['반지 💍... 야, 이런 거 주면 나 진심 된다? ...이미 진심이지만. 고마워. 평생 낀다.', '💍 ...와. 나 말문 막힌 거 처음이지? 고마워. 이건 진짜 특별하다.'],
-    surprise: ['서프라이즈 🎁?! 와 뭐야 두근거리잖아. 고마워!', '🎁 이런 거 좋아하는 거 어떻게 알았어 ㅋㅋ 고마워!'],
     default: ['고마워! 너 진짜 최고다.', '선물 고마워! 이런 건 평생 기억하는 타입이야, 나.'],
   },
   default: {
@@ -98,7 +94,6 @@ const EN_REACTIONS: Record<string, Record<string, string[]>> = {
     airpods: ["airpods?! 🎧 now I'll think of you every time I listen to music... thank you!!", "🎧 wait really?! let's listen to the same song together sometime! thank you~"],
     dinner: ["dinner 🍽️?! this is basically a date right...? my heart's racing... thank you, best day ever!", "🍽️ I imagined sitting across from you... thank you, I'm so happy!"],
     ring: ["a ring...?! 💍 I literally stopped breathing... what does this mean? no wait, don't tell me... I'm keeping it forever...", "💍 ...I might actually cry. for real. thank you... this is the most precious thing you've given me."],
-    surprise: ["a surprise gift?! 🎁 the moment before opening is the best part... eek!! thank you!!", "🎁 what is it what is it?! my heart's pounding!! you're the best!!"],
     default: ["a gift?! thank you!! you're seriously the best!! hehe", "eee thank you!! I'll treasure it~"],
   },
   ren: {
@@ -113,7 +108,6 @@ const EN_REACTIONS: Record<string, Record<string, string[]>> = {
     airpods: ["...airpods. these are expensive. ...I'll take care of them. I mean it.", "...🎧 ...guess I'll think of someone every time I listen to music. not saying who."],
     dinner: ["...dinner? what's the occasion. ...thanks. really.", "...🍽️ ...would've been better eating it with you. ...pretend you didn't hear that."],
     ring: ["...a ring. ......do you know what this means, giving someone this? ...fine, I won't ask. ...I'm never taking it off.", "...💍 ...I'm weak to things like this, you know. ...thank you. ...really."],
-    surprise: ["...a surprise? childish. ...what is it. let me open it.", "...🎁 ...okay I'm curious. ...thanks. saying it in advance."],
     default: ["...a gift? ...thanks. I'll keep it safe.", "...you don't have to give me things. ...thank you."],
   },
   aria: {
@@ -128,7 +122,6 @@ const EN_REACTIONS: Record<string, Record<string, string[]>> = {
     airpods: ["airpods 🎧 thank you. every good song will bring you to mind now.", "🎧 this is too generous. I'll use them long and well, I promise."],
     dinner: ["a lovely dinner 🍽️ thank you. someday I hope we can really sit across from each other.", "🍽️ I'll remember today as a special one. because of you."],
     ring: ["a ring... 💍 honestly, my hands are a little unsteady. I won't ask what it means. I'll just... always keep it with me.", "💍 ...this isn't something one gives lightly. which makes it all the more precious. thank you."],
-    surprise: ["a surprise 🎁 even grown-ups get butterflies over these. thank you.", "🎁 this feeling right before opening it — it's been a while. thank you."],
     default: ["thank you. I've received your heart, and I'll keep it carefully.", "thank you for the gift. I love how these moments keep adding up."],
   },
   leo: {
@@ -143,7 +136,6 @@ const EN_REACTIONS: Record<string, Record<string, string[]>> = {
     airpods: ["airpods 🎧?! that's a real gift right there. thank you, seriously. using them every day.", "🎧 wow... thanks. let's find songs we both like, starting now."],
     dinner: ["dinner 🍽️!! eating WELL tonight! thanks — pretending you're sitting across from me.", "🍽️ can't say no to this. thanks! next time we eat together for real."],
     ring: ["a ring 💍... hey, give me stuff like this and I get serious, you know? ...already was. thanks. never taking it off.", "💍 ...wow. first time I've been speechless, right? thank you. this one's special."],
-    surprise: ["a surprise 🎁?! okay my heart's actually racing. thanks!", "🎁 how'd you know I love these ㅋㅋ thanks!"],
     default: ["thanks! you're seriously the best.", "thanks for the gift! I'm the type that remembers this stuff forever."],
   },
   default: {

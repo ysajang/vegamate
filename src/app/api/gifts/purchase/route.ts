@@ -127,13 +127,11 @@ async function handler(req: NextRequest) {
     character_id: characterId,
   });
 
-  // 8. Calculate hearts for surprise gift
-  let heartsToGrant = gift.hearts_value;
-  if (giftSlug === 'surprise' && gift.hearts_min && gift.hearts_max) {
-    heartsToGrant = Math.floor(
-      Math.random() * (gift.hearts_max - gift.hearts_min + 1) + gift.hearts_min
-    );
-  }
+  // 8. Hearts granted = the gift's fixed value (server-authoritative).
+  //    Randomized payouts were removed: a paid random reward is a loot box
+  //    (PayPal gambling classification + app-store gambling policy). All gifts
+  //    now grant a deterministic, disclosed amount.
+  const heartsToGrant = gift.hearts_value;
 
   // 9. Create pending transaction
   const { data: tx, error: txError } = await serviceClient

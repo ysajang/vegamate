@@ -35,7 +35,7 @@ export const HEART_CONFIG = {
 export const GIFT_SLUGS = [
   'coffee', 'milktea', 'cake', 'book', 'movie',
   'flowers', 'plushie', 'clothes', 'airpods',
-  'dinner', 'ring', 'surprise',
+  'dinner', 'ring',
 ] as const;
 
 export type GiftSlug = (typeof GIFT_SLUGS)[number];
