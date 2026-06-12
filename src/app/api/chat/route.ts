@@ -80,13 +80,28 @@ async function handler(req: NextRequest) {
   const character = conversation.character as DbCharacter;
 
   // 5. Check hearts (replaces credit check)
-  const { data: heartBalance } = await serviceClient.rpc('consume_heart', {
+  // Active subscribers are promised unlimited conversation — they must never
+  // consume hearts nor hit the gift gate. Checked BEFORE consume_heart
+  // (previously only checked deep in the intimacy block, so subscribers were
+  // being charged hearts: a direct breach of the subscription perk).
+  const subCheck = await serviceClient.rpc('get_active_subscription', {
     p_user_id: user.id,
   });
+  const isSubscriber = Boolean(subCheck.data?.active);
+
+  const { data: heartBalance } = isSubscriber
+    ? { data: null }
+    : await serviceClient.rpc('consume_heart', {
+        p_user_id: user.id,
+      });
 
   // heartBalance === -1 means insufficient hearts
+  // Subscribers: heartBalance is null by design — treat as ample so the
+  // low-balance nudge and the exhaustion gate never fire for them.
   let heartsRemaining: number;
-  if (heartBalance === -1) {
+  if (isSubscriber) {
+    heartsRemaining = Number.MAX_SAFE_INTEGER;
+  } else if (heartBalance === -1) {
     // SAFETY OVERRIDE: never put a crisis message behind the gift gate.
     // detectCrisis normally runs inside ai-service (after this check), so a
     // user in distress at zero balance would otherwise hit a paywall instead
@@ -328,10 +343,7 @@ async function handler(req: NextRequest) {
     });
 
     if (bump && bump.found && aiResult.crisisSeverity === 'none') {
-      const subRes = await serviceClient.rpc('get_active_subscription', {
-        p_user_id: user.id,
-      });
-      const hasActiveSubscription = Boolean(subRes.data?.active);
+      const hasActiveSubscription = isSubscriber;
 
       const show = shouldShowUpgradePrompt({
         stagedUp: Boolean(bump.staged_up),
