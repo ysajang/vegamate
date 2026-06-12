@@ -314,19 +314,6 @@ export default function SelectPage() {
         >
           💬
         </button>
-
-        {/* Favorite */}
-        <button
-          className="flex size-[52px] items-center justify-center rounded-full text-xl"
-          style={{
-            border: '1.5px solid rgba(255,255,255,0.12)',
-            background: 'rgba(255,255,255,0.05)',
-            color: 'rgba(255,255,255,0.5)',
-          }}
-          aria-label="Favorite"
-        >
-          ★
-        </button>
       </div>
     </main>
   );
