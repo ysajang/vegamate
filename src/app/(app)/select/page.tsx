@@ -68,6 +68,12 @@ export default function SelectPage() {
 
         if (json.success) {
           router.push(`/chat/${json.data.conversation.id}`);
+        } else if (json.code === 'AGE_NOT_VERIFIED') {
+          // Reached select without completing the age step (e.g. deep link).
+          // Send them to onboarding to verify before any conversation starts.
+          router.replace('/onboarding');
+        } else {
+          setStarting(null);
         }
       } catch {
         setStarting(null);

@@ -256,6 +256,8 @@ export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
+  /** Machine-readable error code (e.g. 'AGE_NOT_VERIFIED') for client routing. */
+  code?: string;
 }
 
 export interface ConsumeCreditsResult {

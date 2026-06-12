@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { createServerSupabase, createServiceRoleClient } from '@/lib/supabase/server';
 import { apiSuccess, apiError, withErrorHandler, AppError } from '@/lib/api-utils';
 import { sanitizeString, isValidUUID } from '@/lib/validators';
+import { assertAgeVerified } from '@/lib/auth/age-guard';
 
 // GET /api/conversations -> list user's conversations with character data
 async function getHandler(req: NextRequest) {
@@ -51,6 +52,12 @@ async function postHandler(req: NextRequest) {
   }
 
   const serviceClient = createServiceRoleClient();
+
+  // Age gate at the data-access layer: block conversation creation for
+  // non-verified users so the gate holds even when the onboarding UI is
+  // skipped via direct navigation. Defense-in-depth with the same check in
+  // /api/chat.
+  await assertAgeVerified(serviceClient, user.id);
 
   // Verify character exists and is active
   const { data: character, error: charError } = await serviceClient

@@ -18,12 +18,13 @@ export function apiSuccess<T>(data: T, status = 200): NextResponse<ApiResponse<T
 
 export function apiError(
   message: string,
-  status = 400
+  status = 400,
+  code?: string
 ): NextResponse<ApiResponse> {
   // Never expose internal errors to client
   const safeMessage = status >= 500 ? 'Internal server error' : message;
   return NextResponse.json(
-    { success: false, error: safeMessage },
+    { success: false, error: safeMessage, ...(code ? { code } : {}) },
     { status }
   );
 }
@@ -37,7 +38,7 @@ export function withErrorHandler<TArgs extends unknown[]>(
       return await handler(req, ...args);
     } catch (error) {
       if (error instanceof AppError) {
-        return apiError(error.message, error.statusCode);
+        return apiError(error.message, error.statusCode, error.code);
       }
 
       console.error('[API Error]', {

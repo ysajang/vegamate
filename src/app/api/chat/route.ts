@@ -5,6 +5,7 @@ import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { sanitizeString, isValidUUID } from '@/lib/validators';
 import { HEART_CONFIG, HEART_EXHAUSTION_MESSAGES, LLM_CONFIG } from '@/config/constants';
 import { detectCrisis } from '@/lib/chat/safety';
+import { assertAgeVerified } from '@/lib/auth/age-guard';
 import { evaluateSelfieGuard } from '@/lib/chat/selfie-trigger';
 import { getCharacterScenes } from '@/lib/chat/selfie-context';
 import { generateAIResponse } from '@/lib/chat/ai-service';
@@ -63,6 +64,12 @@ async function handler(req: NextRequest) {
   }
 
   const serviceClient = createServiceRoleClient();
+
+  // Age gate at the data-access layer (see age-guard.ts). Enforced here, not
+  // just in onboarding UI, so a direct/deep-link request to chat can't bypass
+  // the adult check. Free conversation was previously ungated — only payment
+  // checked age — so a non-verified user could chat on signup hearts.
+  await assertAgeVerified(serviceClient, user.id);
 
   // 4. Verify conversation belongs to user + get character
   const { data: conversation, error: convError } = await serviceClient

@@ -360,6 +360,10 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
           }
         } else {
           setMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
+          if (json.code === 'AGE_NOT_VERIFIED') {
+            window.location.href = '/onboarding';
+            return;
+          }
           setError(json.error || 'Failed to send message');
         }
       } catch {
