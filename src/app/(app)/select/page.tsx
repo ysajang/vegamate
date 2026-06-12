@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Settings } from 'lucide-react';
 import type { DbCharacter } from '@/types';
 
 /** Map character slug to accent color */
@@ -156,6 +156,16 @@ export default function SelectPage() {
             />
           ))}
         </div>
+
+        {/* Settings / account entry */}
+        <button
+          onClick={() => router.push('/settings')}
+          aria-label="Settings"
+          className="absolute right-3 top-7 z-10 flex size-9 items-center justify-center rounded-full backdrop-blur-md"
+          style={{ background: 'rgba(0,0,0,0.35)' }}
+        >
+          <Settings className="size-[18px] text-white/80" />
+        </button>
 
         {/* Character image or placeholder */}
         {char.avatar_url ? (
