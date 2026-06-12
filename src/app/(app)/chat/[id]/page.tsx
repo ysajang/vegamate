@@ -388,7 +388,6 @@ export default function ChatPage({ params }: ChatPageProps) {
       <div className="mx-auto w-full max-w-lg">
         <ChatInput
           onSend={sendMessage}
-          onGiftClick={() => setGiftSheetOpen(true)}
           disabled={isSending || heartsExhausted}
           placeholder={
             heartsExhausted

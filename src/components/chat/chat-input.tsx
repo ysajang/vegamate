@@ -1,22 +1,15 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { ArrowRight, Gift } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 
 interface ChatInputProps {
   onSend: (content: string) => void;
   disabled?: boolean;
   placeholder?: string;
-  /**
-   * Opens the gift sheet. This is the user-INITIATED purchase entry point —
-   * without it the only paths to a gift are the AI's occasional hint and the
-   * zero-balance gate, i.e. a user moved to gift in the moment has nowhere
-   * to tap. Framed as a gift action (🎁), never as a store/top-up.
-   */
-  onGiftClick?: () => void;
 }
 
-export function ChatInput({ onSend, disabled, placeholder, onGiftClick }: ChatInputProps) {
+export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
   const [value, setValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hasText = value.trim().length > 0;
@@ -59,18 +52,6 @@ export function ChatInput({ onSend, disabled, placeholder, onGiftClick }: ChatIn
         borderTop: '0.5px solid var(--vm-glass-border)',
       }}
     >
-      {/* Gift entry — user-initiated gifting, always available */}
-      {onGiftClick && (
-        <button
-          onClick={onGiftClick}
-          className="flex size-11 flex-shrink-0 items-center justify-center rounded-full transition-all duration-200 active:scale-95"
-          style={{ background: 'var(--vm-card)' }}
-          aria-label="Send a gift"
-        >
-          <Gift className="size-[18px]" style={{ color: 'var(--vm-rose)' }} />
-        </button>
-      )}
-
       {/* Input field */}
       <div
         className="vm-glass flex flex-1 items-center"
