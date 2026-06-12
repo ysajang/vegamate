@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import type { EmailOtpType } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
+import { safeNextPath } from '@/lib/auth/safe-redirect';
 
 /**
  * Auth callback for both flows:
@@ -65,11 +66,6 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${origin}/login?error=auth_failed`);
   }
 
-  // Explicit next param wins (used by deep links)
-  if (next) {
-    return NextResponse.redirect(`${origin}${next}`);
-  }
-
   // Route by onboarding state
   const {
     data: { user },
@@ -82,10 +78,20 @@ export async function GET(request: Request) {
       .eq('id', user.id)
       .single();
 
-    return NextResponse.redirect(
-      `${origin}${profile?.display_name ? '/select' : '/onboarding'}`
-    );
+    const onboarded = Boolean(profile?.display_name);
+
+    // Not onboarded yet: ignore `next` entirely and force onboarding. A deep
+    // link must never let a user skip the name/age step.
+    if (!onboarded) {
+      return NextResponse.redirect(`${origin}/onboarding`);
+    }
+
+    // Onboarded: honour an explicit deep link, but only if it passes the
+    // open-redirect guard (same-origin relative path only).
+    const dest = safeNextPath(next, '/select');
+    return NextResponse.redirect(`${origin}${dest}`);
   }
 
-  return NextResponse.redirect(`${origin}/select`);
+  // No session resolved → back to login (not /select, which would bounce).
+  return NextResponse.redirect(`${origin}/login`);
 }
