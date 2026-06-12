@@ -47,10 +47,12 @@ export async function fulfillGiftTransaction(
   // onto a cheaper tx via custom_id. Skipped only when the caller could not
   // resolve a captured amount (we then fall back to custom_id trust).
   if (typeof capturedAmountUsd === 'number' && Number.isFinite(capturedAmountUsd)) {
-    const expected = Number(
-      (tx as unknown as { gift?: { price_usd?: number | string } }).gift?.price_usd
-    );
-    if (Number.isFinite(expected) && Math.abs(capturedAmountUsd - expected) > 0.01) {
+    const rawPrice = (tx as unknown as { gift?: { price_usd?: number | string } }).gift?.price_usd;
+    // Number(null) === 0 and Number('') === 0, which would falsely flag a
+    // legit capture as a mismatch and fail the tx. Only compare when we have a
+    // genuine positive price; otherwise skip the check (custom_id trust).
+    const expected = rawPrice == null ? NaN : Number(rawPrice);
+    if (Number.isFinite(expected) && expected > 0 && Math.abs(capturedAmountUsd - expected) > 0.01) {
       console.error(
         `[Fulfill] AMOUNT MISMATCH tx=${giftTxId} expected=$${expected} captured=$${capturedAmountUsd} — refusing to credit`
       );
