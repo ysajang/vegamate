@@ -5,11 +5,11 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 
 /**
- * Launch switch: set NEXT_PUBLIC_LAUNCH_MODE=live in Vercel env (+ redeploy)
- * to swap waitlist capture -> product entry. Any other value keeps waitlist.
+ * Launch switch: live by default. Set NEXT_PUBLIC_LAUNCH_MODE=waitlist in
+ * Vercel env (+ redeploy) to revert to waitlist capture.
  * Waitlist data (preregistrations table) and /api/preregister stay intact.
  */
-const IS_LIVE = process.env.NEXT_PUBLIC_LAUNCH_MODE === 'live';
+const IS_LIVE = (process.env.NEXT_PUBLIC_LAUNCH_MODE ?? 'live') === 'live';
 
 export const metadata: Metadata = {
   title: 'VegaMate — Your AI Companion Sends You Selfies',
