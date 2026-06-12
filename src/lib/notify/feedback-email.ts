@@ -1,11 +1,13 @@
 /**
- * Feedback notification email.
+ * Feedback notification email — Cloudflare Email Sending REST API.
  *
- * Sends a notification to the internal inbox when new feedback arrives, using
- * the Resend REST API directly (no SDK dependency). Designed to be best-effort:
- * if env keys are missing or the call fails, it never throws — feedback is
- * already persisted in Supabase, which is the source of truth. Email is a
- * convenience layer on top.
+ * Free path: sending to a *verified destination address* (the address already
+ * registered + verified in Cloudflare Email Routing) costs nothing on any plan
+ * and works with only Email Routing configured. So FEEDBACK_NOTIFY_TO must be
+ * the verified personal inbox, NOT the routed alias (support@vegamate.com).
+ *
+ * Best-effort by design: if env keys are missing or the call fails, it never
+ * throws — feedback is already persisted in Supabase (source of truth).
  */
 
 interface FeedbackEmailInput {
@@ -15,8 +17,6 @@ interface FeedbackEmailInput {
   contactEmail: string | null;
   userId: string | null;
 }
-
-const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 
 /** Escape for safe inclusion in HTML email body. */
 function esc(str: string): string {
@@ -31,19 +31,29 @@ function esc(str: string): string {
 }
 
 export async function sendFeedbackNotification(input: FeedbackEmailInput): Promise<void> {
-  const apiKey = process.env.RESEND_API_KEY;
-  const to = process.env.FEEDBACK_NOTIFY_TO;
-  const from = process.env.FEEDBACK_NOTIFY_FROM;
+  const accountId = process.env.CF_ACCOUNT_ID;
+  const apiToken = process.env.CF_EMAIL_API_TOKEN; // permission: Email Sending: Edit
+  const to = process.env.FEEDBACK_NOTIFY_TO; // verified destination address (personal inbox)
+  const from = process.env.FEEDBACK_NOTIFY_FROM; // address on the routed domain, e.g. noreply@vegamate.com
 
   // Notification is optional infra. No keys -> Supabase-only operation.
-  if (!apiKey || !to || !from) {
+  if (!accountId || !apiToken || !to || !from) {
     return;
   }
 
   const subject = `[VegaMate feedback] ${input.category} — ${input.id.slice(0, 8)}`;
+  const text = [
+    `New feedback (${input.category})`,
+    '',
+    input.message,
+    '',
+    '---',
+    `Contact: ${input.contactEmail ?? '(none)'}`,
+    `User ID: ${input.userId ?? '(anonymous)'}`,
+    `Feedback ID: ${input.id}`,
+  ].join('\n');
   const html = [
     `<h2>New feedback (${esc(input.category)})</h2>`,
-    `<p><strong>Message</strong></p>`,
     `<p style="white-space:pre-wrap">${esc(input.message)}</p>`,
     `<hr/>`,
     `<p><strong>Contact:</strong> ${input.contactEmail ? esc(input.contactEmail) : '(none)'}</p>`,
@@ -55,28 +65,32 @@ export async function sendFeedbackNotification(input: FeedbackEmailInput): Promi
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
 
-    const res = await fetch(RESEND_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from,
-        to: [to],
-        subject,
-        html,
-        // Lets you hit "reply" and reach the user directly when they left an email.
-        ...(input.contactEmail ? { reply_to: input.contactEmail } : {}),
-      }),
-      signal: controller.signal,
-    });
+    const res = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${accountId}/email/sending/send`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to,
+          from: { address: from, name: 'VegaMate Feedback' },
+          subject,
+          html,
+          text,
+          // Reply lands directly in the user's inbox when they left an email.
+          ...(input.contactEmail ? { reply_to: input.contactEmail } : {}),
+        }),
+        signal: controller.signal,
+      }
+    );
 
     clearTimeout(timeout);
 
     if (!res.ok) {
       const detail = await res.text().catch(() => '');
-      console.error('[Feedback Email] non-OK response', res.status, detail.slice(0, 300));
+      console.error('[Feedback Email] CF non-OK response', res.status, detail.slice(0, 300));
     }
   } catch (err) {
     // Swallow: feedback already saved. Don't let email failure break the request.
