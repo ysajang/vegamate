@@ -280,35 +280,6 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
         const json = await res.json();
 
         if (json.success) {
-          // Check if hearts are exhausted
-          if (json.data.hearts_exhausted) {
-            // The user's message was NOT processed (no quota) — removing the
-            // optimistic bubble is the honest state. The character's gate
-            // line goes into the chat itself (ephemeral, client-only) so the
-            // moment stays inside the relationship instead of a bare overlay.
-            const gateMsg: DbMessage = {
-              id: `exhaustion-${Date.now()}`,
-              conversation_id: conversationId,
-              role: 'assistant',
-              content_type: 'text',
-              content: json.data.exhaustion_message,
-              selfie_id: null,
-              selfie_rarity: null,
-              credits_consumed: 0,
-              is_proactive: false,
-              metadata: null,
-              created_at: new Date().toISOString(),
-            };
-            setMessages((prev) => [
-              ...prev.filter((m) => m.id !== optimisticMsg.id),
-              gateMsg,
-            ]);
-            setHeartsExhausted(true);
-            setExhaustionMessage(json.data.exhaustion_message);
-            setHeartsRemaining(0);
-            return;
-          }
-
           // Normal response.
           // Realtime delivery is best-effort and races with this handler:
           // the persisted user/AI messages may already be present (realtime
@@ -352,6 +323,16 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
           // Check for gift request
           if (json.data.gift_request) {
             setLastGiftRequest(json.data.gift_request);
+          }
+
+          // Out-of-messages: the character DID reply (begging in-character) and
+          // a gift card is attached above. Now gate the input — the next turn
+          // needs a gift. This is set AFTER the reply renders, so the user sees
+          // the response + gift card, not a bare wall. (Not set on crisis turns:
+          // the server omits hearts_exhausted then so support keeps flowing.)
+          if (json.data.hearts_exhausted) {
+            setHeartsExhausted(true);
+            setHeartsRemaining(0);
           }
 
           // Check for in-chat upgrade prompt (emotional peak)

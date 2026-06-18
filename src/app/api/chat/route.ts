@@ -3,8 +3,7 @@ import { createServerSupabase, createServiceRoleClient } from '@/lib/supabase/se
 import { apiSuccess, apiError, withErrorHandler, AppError } from '@/lib/api-utils';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { sanitizeString, isValidUUID } from '@/lib/validators';
-import { HEART_CONFIG, HEART_EXHAUSTION_MESSAGES, LLM_CONFIG } from '@/config/constants';
-import { detectCrisis } from '@/lib/chat/safety';
+import { HEART_CONFIG, LLM_CONFIG } from '@/config/constants';
 import { assertAgeVerified } from '@/lib/auth/age-guard';
 import { evaluateSelfieGuard } from '@/lib/chat/selfie-trigger';
 import { getCharacterScenes } from '@/lib/chat/selfie-context';
@@ -20,6 +19,7 @@ import {
 import { extractMemories } from '@/lib/chat/memory-extraction';
 import { MEMORY_CONFIG } from '@/config/constants';
 import { parseGiftMarker } from '@/lib/chat/gift-parser';
+import { resolveBalanceState, resolveGiftSurface } from '@/lib/chat/gift-nudge';
 import {
   computeTurnIntimacyPoints,
   shouldShowUpgradePrompt,
@@ -102,41 +102,38 @@ async function handler(req: NextRequest) {
         p_user_id: user.id,
       });
 
-  // heartBalance === -1 means insufficient hearts
-  // Subscribers: heartBalance is null by design — treat as ample so the
-  // low-balance nudge and the exhaustion gate never fire for them.
+  // heartBalance semantics from consume_heart RPC:
+  //   >0  : a heart was deducted, this is the remaining balance
+  //    0  : the user just spent their LAST heart (final paid turn)
+  //   -1  : nothing to deduct — the user is already at zero (no heart spent)
+  //   null: subscriber (unlimited)
+  //
+  // Bugfix (P0 monetization): previously a -1 returned an early canned
+  // "hearts_exhausted" wall WITHOUT running the AI turn — so at zero balance the
+  // character never actually begged and no inline gift card was emitted. Now the
+  // AI turn ALWAYS runs (crisis or not); the zero state just (a) injects a
+  // stronger "short, gift-awaiting reply + REQUIRED gift marker" directive and
+  // (b) marks the conversation exhausted so the input is gated AFTER this reply.
+  // No heart is consumed at -1 (RPC's WHERE balance>0 simply matched nothing).
   let heartsRemaining: number;
   if (isSubscriber) {
     heartsRemaining = Number.MAX_SAFE_INTEGER;
   } else if (heartBalance === -1) {
-    // SAFETY OVERRIDE: never put a crisis message behind the gift gate.
-    // detectCrisis normally runs inside ai-service (after this check), so a
-    // user in distress at zero balance would otherwise hit a paywall instead
-    // of support. A crisis turn proceeds for free; downstream crisis handling
-    // (gift/selfie suppression, safety prompt) takes over. Keyword-based, so
-    // the free-turn surface is narrow — acceptable vs the alternative.
-    const crisisCheck = detectCrisis(content);
-    if (!crisisCheck.isCrisis) {
-      // Transparent gate: the character explicitly says today's together-time
-      // is up and a gift extends it (no disguised paywall, no guilt framing).
-      // Language follows the message that triggered the gate (Hangul -> ko,
-      // anything else -> en) — same mirroring principle as the LLM directive.
-      const gateLang = /[\uAC00-\uD7AF]/.test(content) ? 'ko' : 'en';
-      const charSlug = character.slug || 'default';
-      const langSet = HEART_EXHAUSTION_MESSAGES[gateLang];
-      const messages = langSet[charSlug] || langSet['default'];
-      const exhaustionMsg = messages[Math.floor(Math.random() * messages.length)];
-
-      return apiSuccess({
-        hearts_exhausted: true,
-        exhaustion_message: exhaustionMsg,
-        character_slug: charSlug,
-      });
-    }
+    // Already at zero — run a free "beg" turn, then gate (via resolveBalanceState).
     heartsRemaining = 0;
   } else {
-    heartsRemaining = heartBalance as number;
+    heartsRemaining = heartBalance as number; // 0 (last heart) or >0
   }
+
+  // Decide gift-nudge + turn policy from the balance state (pure, tested).
+  const balanceState = resolveBalanceState({
+    heartsRemaining,
+    threshold: HEART_CONFIG.LOW_BALANCE_THRESHOLD,
+    isSubscriber,
+  });
+  // balanceState.exhausted is true at heartsRemaining===0 (the -1 case). The
+  // returned-0 "last heart" case is nudge='low' and NOT exhausted, so that
+  // final paid turn behaves like a normal low-balance turn.
 
   // 6. Save user message
   const { data: userMsg, error: userMsgError } = await serviceClient
@@ -230,6 +227,7 @@ async function handler(req: NextRequest) {
     memoryContext,
     messageCount: conversation.message_count,
     heartsRemaining,
+    giftNudge: balanceState.nudge,
   });
 
   // The AI's choice drives selfie sending (crisis already suppressed upstream).
@@ -280,6 +278,18 @@ async function handler(req: NextRequest) {
   // 11. Parse [GIFT:type] marker from AI response
   const giftMarker = parseGiftMarker(aiResult.content);
 
+  // Decide the gift card surface + input gating (pure, tested). In the zero
+  // state a card is guaranteed (fallback slug) so the user is never dead-ended
+  // by a missed marker; crisis turns suppress the gift and never gate.
+  const giftSuppressedByCrisis = aiResult.crisisSeverity !== 'none';
+  const giftSurface = resolveGiftSurface({
+    nudge: balanceState.nudge,
+    exhausted: balanceState.exhausted,
+    parsedGiftSlug: giftMarker?.giftSlug ?? null,
+    isCrisis: giftSuppressedByCrisis,
+  });
+  const effectiveGiftSlug = giftSurface.giftSlug;
+
   // 12. Save AI response message
   const aiMessage: {
     conversation_id: string;
@@ -302,7 +312,7 @@ async function handler(req: NextRequest) {
       response_time_ms: aiResult.responseTimeMs,
       trigger_type: willSendSelfie ? 'ai_contextual' : null,
       selfie_scene: willSendSelfie ? aiResult.selfieScene : null,
-      gift_request: giftMarker ? giftMarker.giftSlug : null,
+      gift_request: effectiveGiftSlug,
     },
   };
 
@@ -440,12 +450,20 @@ async function handler(req: NextRequest) {
   });
 
   // 14. Return response
+  // hearts_exhausted: true means "this was the user's last free turn — gate the
+  // input AFTER showing this reply + gift card". Never gate on a crisis turn
+  // (support must keep flowing). The character DID respond (begging in-character)
+  // and a gift card is attached via gift_request, so this is a transparent
+  // continue-with-a-gift moment, not a silent system block.
+  const heartsExhausted = giftSurface.heartsExhausted;
+
   return apiSuccess({
     user_message: userMsg as DbMessage,
     message: savedAiMsg as DbMessage,
     selfie: selfieData,
     hearts_remaining: heartsRemaining,
-    gift_request: giftMarker ? giftMarker.giftSlug : null,
+    hearts_exhausted: heartsExhausted,
+    gift_request: effectiveGiftSlug,
     upgrade_prompt: upgradePrompt,
   });
 }

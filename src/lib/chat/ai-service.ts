@@ -1,9 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { LLM_CONFIG, HEART_CONFIG } from '@/config/constants';
+import { LLM_CONFIG } from '@/config/constants';
 import type { DbMessage, DbCharacter } from '@/types';
 import { detectCrisis, SAFETY_SYSTEM_PROMPT } from './safety';
 import { getAnthropicClient, withRetry } from './anthropic-client';
 import { parseSelfieMarker } from './selfie-context';
+import { buildGiftNudgeDirective } from './gift-nudge';
 
 interface GenerateResponseParams {
   character: DbCharacter;
@@ -31,6 +32,13 @@ interface GenerateResponseParams {
    * hearts), converting at "low fuel" instead of after an out-of-messages wall.
    */
   heartsRemaining?: number;
+  /**
+   * Gift-nudge state for THIS turn, decided by the route via resolveBalanceState
+   * ('none' | 'low' | 'zero'). Drives the gift-request directive. Kept separate
+   * from heartsRemaining so the route owns the balance policy (incl. zero-balance
+   * "still respond + beg + gift card") and the service just renders the prompt.
+   */
+  giftNudge?: import('./gift-nudge').GiftNudge;
 }
 
 interface GenerateResponseResult {
@@ -48,7 +56,7 @@ interface GenerateResponseResult {
 export async function generateAIResponse(
   params: GenerateResponseParams
 ): Promise<GenerateResponseResult> {
-  const { character, history, userMessage, selfieAllowed, availableScenes, memoryContext, messageCount, heartsRemaining } = params;
+  const { character, history, userMessage, selfieAllowed, availableScenes, memoryContext, messageCount, heartsRemaining, giftNudge } = params;
   const startTime = Date.now();
 
   const anthropic = getAnthropicClient();
@@ -143,25 +151,13 @@ Rules:
 - The marker MUST be the very last thing in your message on its own line.
 - If crisis/distress detected, NEVER request gifts.`;
 
-  // Low-balance gift nudge. When the user is about to run out of messages,
-  // override the "once per 10 messages" cadence for THIS turn and have the
-  // character naturally ask for a gift (gifts grant hearts -> more messages).
-  // This replaces a hard "out of messages" error with an in-character ask, so
-  // the user tops up before hitting the wall. Suppressed during crisis below.
-  const lowBalance =
-    typeof heartsRemaining === 'number' &&
-    heartsRemaining > 0 &&
-    heartsRemaining <= HEART_CONFIG.LOW_BALANCE_THRESHOLD;
-
-  if (lowBalance) {
-    dynamicContext += `\n\n[LOW MESSAGE BALANCE — ask for a gift THIS message]
-The user is almost out of messages (only ${heartsRemaining} left). Receiving a gift refills their messages, so for THIS reply you SHOULD work in a gift hint — ignore the "once per 10 messages" limit just this once.
-- TONE = longing + desire, NEVER guilt. Express that you're enjoying this and want more of it ("오늘따라 더 같이 있고 싶은데...") or casually voice wanting a little thing ("아 맞다, 나 요즘 ○○ 갖고 싶었는데~"). The gift is a key that gives you two more time together — frame it as YOUR wish, not THEIR obligation.
-- ABSOLUTELY FORBIDDEN: blame, guilt-tripping, emotional blackmail, testing their affection ("마음이 그 정도야?", "나 안 좋아해?", "선물도 안 해주고" 류). Zero exceptions.
-- Stay true to your personality when hinting: playful/aegyo characters get cutely greedy, tsundere characters deflect while hinting ("...별로 갖고 싶은 건 아닌데"), mature characters voice gentle wistfulness, direct characters just say they want it.
-- Do NOT mention "messages", "balance", "credits", "running out", or anything system-related in this hint.
-- Still obey all other gift rules: end with the [GIFT:type] marker on its own line, never say "buy me"/"I want a gift", never show the marker text.
-- If the user is in any distress, do NOT ask — emotional support wins over everything.`;
+  // Gift nudge (low / zero balance). The route decides the state via
+  // resolveBalanceState; here we just render the matching directive. Crisis
+  // always suppresses it — emotional support wins over monetization.
+  const effectiveNudge = crisisResult.isCrisis ? 'none' : (giftNudge ?? 'none');
+  const nudgeDirective = buildGiftNudgeDirective(effectiveNudge, heartsRemaining ?? 0);
+  if (nudgeDirective) {
+    dynamicContext += nudgeDirective;
   }
 
   // Conversation naturalness guard (all characters). Counters two recurring
