@@ -6,7 +6,11 @@ import { sanitizeString, isValidUUID } from '@/lib/validators';
 import { APP_CONFIG } from '@/config/constants';
 import { isPayPalActive } from '@/lib/payments/provider';
 import { getOrdersController } from '@/lib/payments/paypal/client';
-import { CheckoutPaymentIntent } from '@paypal/paypal-server-sdk';
+import {
+  CheckoutPaymentIntent,
+  PaypalExperienceLandingPage,
+  PaypalExperienceUserAction,
+} from '@paypal/paypal-server-sdk';
 
 /**
  * Mark a gift tx failed AND release the spend it reserved at intent time.
@@ -214,11 +218,23 @@ async function createPayPalGiftOrder({
             },
           },
         ],
-        applicationContext: {
-          brandName: 'VegaMate',
-          userAction: 'PAY_NOW' as never,
-          returnUrl: `${APP_CONFIG.url}/payment/return?type=gift&tx=${tx.id}`,
-          cancelUrl: `${APP_CONFIG.url}/payment/return?type=gift&tx=${tx.id}&cancelled=true`,
+        // Guest card checkout: experience_context is the SDK-recommended home
+        // for these fields (application_context is deprecated). landingPage was
+        // previously unset, so PayPal defaulted to LOGIN — forcing the account
+        // login screen before the card form. GUEST_CHECKOUT surfaces the
+        // "Debit or Credit Card" form first, reducing impulse-buy drop-off.
+        // NOTE: PayPal may still force login by IP/risk in some markets; this
+        // only guarantees the option is offered, not that guest is permitted.
+        paymentSource: {
+          paypal: {
+            experienceContext: {
+              brandName: 'VegaMate',
+              landingPage: PaypalExperienceLandingPage.GuestCheckout,
+              userAction: PaypalExperienceUserAction.PayNow,
+              returnUrl: `${APP_CONFIG.url}/payment/return?type=gift&tx=${tx.id}`,
+              cancelUrl: `${APP_CONFIG.url}/payment/return?type=gift&tx=${tx.id}&cancelled=true`,
+            },
+          },
         },
       },
     });
