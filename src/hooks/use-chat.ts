@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { DbMessage } from '@/types';
+import { shouldGateInput } from './exhaustion-gate';
 
 interface UseChatOptions {
   conversationId: string;
@@ -32,7 +33,7 @@ interface UseChatReturn {
   sendMessage: (content: string) => Promise<void>;
   editMessage: (messageId: string, newContent: string) => Promise<void>;
   deleteMessage: (messageId: string) => Promise<void>;
-  clearExhaustion: () => void;
+  clearExhaustion: () => Promise<void>;
 }
 
 const PAGE_SIZE = 50;
@@ -55,6 +56,25 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  // Fetch the authoritative balance and reconcile the input gate. Lifts the gate
+  // when hearts are present (or the user is a subscriber) and engages it when the
+  // user is out of hearts. Shared by initial load, focus-return (post-purchase),
+  // and gift-sheet close. Never claims daily hearts (that's a one-shot on mount).
+  const refreshHeartsGate = useCallback(async () => {
+    try {
+      const res = await fetch('/api/hearts');
+      const json = await res.json();
+      if (!json.success) return;
+      const subscriber = Boolean(json.data.is_subscriber);
+      setHeartsRemaining(json.data.balance);
+      const gated = shouldGateInput({ balance: json.data.balance, isSubscriber: subscriber });
+      setHeartsExhausted(gated);
+      if (!gated) setExhaustionMessage(null);
+    } catch {
+      // Silent — keep the current gate state.
+    }
+  }, []);
 
   // Load initial messages (shows loading spinner)
   useEffect(() => {
@@ -119,7 +139,13 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
     }
 
     const onFocus = () => {
-      if (document.visibilityState === 'visible') refreshMessages();
+      if (document.visibilityState === 'visible') {
+        refreshMessages();
+        // A gift purchase completes out-of-tab (PayPal -> webhook). On return,
+        // re-check the balance so refilled hearts lift the gate without a manual
+        // reload. Never re-gates here on its own beyond the shared rule.
+        refreshHeartsGate();
+      }
     };
 
     document.addEventListener('visibilitychange', onFocus);
@@ -130,38 +156,30 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
       document.removeEventListener('visibilitychange', onFocus);
       window.removeEventListener('focus', onFocus);
     };
-  }, [conversationId]);
+  }, [conversationId, refreshHeartsGate]);
 
   // Load hearts balance (internal accounting only — never rendered to the user).
-  // Daily hearts are auto-claimed silently so the grant keeps working
-  // without any currency-facing UI.
+  // Daily hearts are auto-claimed silently on mount; refreshHeartsGate() then
+  // does the authoritative balance read + input-gate reconciliation.
   useEffect(() => {
     async function loadHearts() {
       try {
-        const res = await fetch('/api/hearts');
-        const json = await res.json();
-        if (!json.success) return;
-
-        if (json.data.can_claim_daily) {
+        const probe = await fetch('/api/hearts');
+        const json = await probe.json();
+        if (json.success && json.data.can_claim_daily) {
           try {
-            const claimRes = await fetch('/api/hearts/daily', { method: 'POST' });
-            const claimJson = await claimRes.json();
-            if (claimJson.success && typeof claimJson.data?.balance === 'number') {
-              setHeartsRemaining(claimJson.data.balance);
-              return;
-            }
+            await fetch('/api/hearts/daily', { method: 'POST' });
           } catch {
-            // Silent — fall through to GET balance
+            // Silent — refreshHeartsGate still reconciles the real balance.
           }
         }
-
-        setHeartsRemaining(json.data.balance);
       } catch {
-        // Silent fail
+        // Silent — refreshHeartsGate below still attempts the read.
       }
+      await refreshHeartsGate();
     }
     loadHearts();
-  }, []);
+  }, [refreshHeartsGate]);
 
   // Subscribe to realtime messages
   useEffect(() => {
@@ -423,10 +441,14 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
     }
   }, []);
 
-  const clearExhaustion = useCallback(() => {
-    setHeartsExhausted(false);
-    setExhaustionMessage(null);
-  }, []);
+  // Called when the gift sheet closes. Closing alone must NOT unlock the
+  // composer — the purchase is async (PayPal -> webhook), so we re-check the
+  // real balance and only lift the gate once hearts were actually refilled.
+  // Otherwise a plain close at zero balance would re-enable chat and re-trigger
+  // the beg + sheet every turn (the infinite "선물 창" loop).
+  const clearExhaustion = useCallback(async () => {
+    await refreshHeartsGate();
+  }, [refreshHeartsGate]);
 
   // Load the next older page (infinite scroll). Returns how many messages
   // were prepended so the caller can preserve scroll position.

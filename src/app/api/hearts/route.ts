@@ -38,10 +38,18 @@ async function handler(_req: NextRequest) {
     : null;
   const canClaim = lastClaimDate !== todayUTC;
 
+  // Subscriber status — the client uses this so it never gates the composer for
+  // an active subscriber (who has unlimited conversation regardless of balance).
+  const subCheck = await serviceClient.rpc('get_active_subscription', {
+    p_user_id: user.id,
+  });
+  const isSubscriber = Boolean(subCheck.data?.active);
+
   return apiSuccess({
     balance: data.balance,
     consecutive_days: data.consecutive_days,
     can_claim_daily: canClaim,
+    is_subscriber: isSubscriber,
   });
 }
 
