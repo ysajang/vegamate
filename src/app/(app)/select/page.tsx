@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { ChevronLeft, ChevronRight, Settings } from 'lucide-react';
 import type { DbCharacter } from '@/types';
+import { isAgeNotVerified } from '@/lib/onboarding/onboarding-routing';
 
 /** Map character slug to accent color */
 function getAccentColor(slug: string): string {
@@ -68,9 +69,10 @@ export default function SelectPage() {
 
         if (json.success) {
           router.push(`/chat/${json.data.conversation.id}`);
-        } else if (json.code === 'AGE_NOT_VERIFIED') {
-          // Reached select without completing the age step (e.g. deep link).
-          // Send them to onboarding to verify before any conversation starts.
+        } else if (isAgeNotVerified(json)) {
+          // Reached select without completing the age step (e.g. deep link, or
+          // a zombie profile). Onboarding now lands such users on the AGE step
+          // (not the name step), so this no longer loops.
           router.replace('/onboarding');
         } else {
           setStarting(null);

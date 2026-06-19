@@ -6,6 +6,12 @@ import Image from 'next/image';
 import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
 import { CharacterAvatar, TypingIndicator } from '@/components/common';
 import type { DbCharacter } from '@/types';
+import {
+  resolveInitialOnboardingStep,
+  stepToIndex,
+  recoverStepOnAgeBlocked,
+  isAgeNotVerified,
+} from '@/lib/onboarding/onboarding-routing';
 
 /** Map character slug to accent color */
 function getAccentColor(slug: string): string {
@@ -571,18 +577,36 @@ export default function OnboardingPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [checkingProfile, setCheckingProfile] = useState(true);
 
-  // Check if user already completed onboarding
+  // Decide where to start onboarding based on the AUTHORITATIVE profile state.
+  // Completion = display_name AND age_verified_adult (not display_name alone —
+  // that was the infinite-loop bug). A "zombie" user (name set but unverified)
+  // is sent straight to the age step, never the name step and never /select.
   useEffect(() => {
     async function checkProfile() {
       try {
         const res = await fetch('/api/profile');
         const json = await res.json();
-        if (json.success && json.data?.display_name) {
+        const profile = json.success ? json.data : null;
+
+        const initialStep = resolveInitialOnboardingStep({
+          display_name: profile?.display_name,
+          age_verified_adult: profile?.age_verified_adult,
+        });
+
+        if (initialStep === null) {
+          // Fully onboarded -> the only safe redirect to /select.
           router.replace('/select');
           return;
         }
+
+        if (initialStep !== 'name') {
+          // Zombie recovery: jump past the name step to the age gate.
+          setStep(stepToIndex(initialStep));
+          // Preserve the already-saved name so the final step can PATCH it.
+          if (profile?.display_name) setName(profile.display_name);
+        }
       } catch {
-        // proceed with onboarding
+        // Network/parse failure -> proceed with onboarding from the start.
       } finally {
         setCheckingProfile(false);
       }
@@ -646,9 +670,20 @@ export default function OnboardingPage() {
 
       if (json.success) {
         router.push(`/chat/${json.data.conversation.id}`);
-      } else {
-        setIsCreating(false);
+        return;
       }
+
+      // Server age gate rejected us at the final step. The old code just
+      // stopped the spinner (frozen screen). Recover at the AGE step so the
+      // user can finish verification instead of being stuck or looped back to
+      // the name step.
+      if (isAgeNotVerified(json)) {
+        setIsCreating(false);
+        setStep(stepToIndex(recoverStepOnAgeBlocked()));
+        return;
+      }
+
+      setIsCreating(false);
     } catch {
       setIsCreating(false);
     }
