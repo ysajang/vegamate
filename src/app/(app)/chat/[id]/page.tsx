@@ -9,6 +9,7 @@ import { ChatInput } from '@/components/chat/chat-input';
 import { ChatHeader } from '@/components/chat/chat-header';
 import { CharacterAvatar, TypingIndicator } from '@/components/common';
 import { GiftSheet } from '@/components/chat/gift-sheet';
+import { shouldReopenGiftSheet, GIFT_SHEET_REOPEN_COOLDOWN_MS } from '@/components/chat/gift-gate';
 import { UpgradePrompt } from '@/components/chat/upgrade-prompt';
 import type { DbCharacter } from '@/types';
 
@@ -21,6 +22,9 @@ export default function ChatPage({ params }: ChatPageProps) {
   const [character, setCharacter] = useState<DbCharacter | null>(null);
   const [pageLoading, setPageLoading] = useState(true);
   const [giftSheetOpen, setGiftSheetOpen] = useState(false);
+  // Timestamp of the last gift-sheet close, for the anti-flicker reopen guard
+  // (tapping the locked composer reopens the sheet, but not instantly on close).
+  const giftSheetClosedAtRef = useRef<number | null>(null);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -206,9 +210,23 @@ export default function ChatPage({ params }: ChatPageProps) {
     }
   }, [messages, isSending, isLoading]);
 
-  // Open gift sheet when hearts exhausted
+  // Open the gift sheet, respecting the anti-flicker cooldown after a close so
+  // a close-tap doesn't immediately reopen it. Used by both the auto-open on
+  // exhaustion and the locked-composer tap (the zero-balance payment funnel).
+  const openGiftSheetGated = useCallback(() => {
+    const reopen = shouldReopenGiftSheet({
+      now: Date.now(),
+      lastClosedAt: giftSheetClosedAtRef.current,
+      cooldownMs: GIFT_SHEET_REOPEN_COOLDOWN_MS,
+    });
+    if (reopen) setGiftSheetOpen(true);
+  }, []);
+
+  // Auto-open the gift sheet the moment hearts run out (first beg turn).
   useEffect(() => {
     if (heartsExhausted) {
+      // Fresh exhaustion: clear any stale close timestamp so it opens promptly.
+      giftSheetClosedAtRef.current = null;
       setGiftSheetOpen(true);
     }
   }, [heartsExhausted]);
@@ -388,7 +406,9 @@ export default function ChatPage({ params }: ChatPageProps) {
       <div className="mx-auto w-full max-w-lg">
         <ChatInput
           onSend={sendMessage}
-          disabled={isSending || heartsExhausted}
+          disabled={isSending}
+          locked={heartsExhausted}
+          onLockedInteract={openGiftSheetGated}
           placeholder={
             heartsExhausted
               ? 'Send a gift to keep chatting!'
@@ -402,6 +422,7 @@ export default function ChatPage({ params }: ChatPageProps) {
         isOpen={giftSheetOpen}
         onClose={() => {
           setGiftSheetOpen(false);
+          giftSheetClosedAtRef.current = Date.now();
           clearExhaustion();
         }}
         characterId={character.id}

@@ -7,14 +7,25 @@ interface ChatInputProps {
   onSend: (content: string) => void;
   disabled?: boolean;
   placeholder?: string;
+  /**
+   * "Locked" gate (out of hearts). Unlike `disabled`, the field stays tappable:
+   * tapping/focusing it or pressing send fires `onLockedInteract` (opens the
+   * gift sheet) instead of accepting input — the zero-balance payment funnel.
+   */
+  locked?: boolean;
+  onLockedInteract?: () => void;
 }
 
-export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
+export function ChatInput({ onSend, disabled, placeholder, locked, onLockedInteract }: ChatInputProps) {
   const [value, setValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hasText = value.trim().length > 0;
 
   const handleSend = useCallback(() => {
+    if (locked) {
+      onLockedInteract?.();
+      return;
+    }
     const trimmed = value.trim();
     if (!trimmed || disabled) return;
     onSend(trimmed);
@@ -22,7 +33,20 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-  }, [value, disabled, onSend]);
+  }, [value, disabled, onSend, locked, onLockedInteract]);
+
+  // When locked (out of hearts), any attempt to engage the composer opens the
+  // gift sheet instead of letting the user type. We blur immediately so the
+  // mobile keyboard never appears, then fire the funnel callback.
+  const handleLockedIntercept = useCallback(
+    (e: React.SyntheticEvent) => {
+      if (!locked) return;
+      e.preventDefault();
+      textareaRef.current?.blur();
+      onLockedInteract?.();
+    },
+    [locked, onLockedInteract]
+  );
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -60,15 +84,24 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
         <textarea
           ref={textareaRef}
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(e) => {
+            if (locked) return; // ignore typing while gated
+            setValue(e.target.value);
+          }}
           onKeyDown={handleKeyDown}
-          placeholder={placeholder || 'Type a message...'}
+          onPointerDown={handleLockedIntercept}
+          onFocus={handleLockedIntercept}
+          placeholder={
+            locked ? (placeholder || 'Send a gift to keep chatting!') : placeholder || 'Type a message...'
+          }
           disabled={disabled}
+          readOnly={locked}
           rows={1}
           className="flex-1 resize-none bg-transparent text-[15px] leading-relaxed outline-none placeholder:opacity-40 disabled:opacity-50"
           style={{
             color: 'var(--vm-text-primary)',
             letterSpacing: '-0.01em',
+            cursor: locked ? 'pointer' : 'text',
           }}
           maxLength={2000}
         />
@@ -77,17 +110,17 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
       {/* Send button */}
       <button
         onClick={handleSend}
-        disabled={disabled || !hasText}
+        disabled={!locked && (disabled || !hasText)}
         className="flex size-11 flex-shrink-0 items-center justify-center rounded-full transition-all duration-200"
         style={{
-          background: hasText ? 'var(--vm-purple)' : 'var(--vm-card)',
-          boxShadow: hasText ? '0 4px 16px rgba(124, 58, 237, 0.4)' : 'none',
+          background: hasText || locked ? 'var(--vm-purple)' : 'var(--vm-card)',
+          boxShadow: hasText || locked ? '0 4px 16px rgba(124, 58, 237, 0.4)' : 'none',
         }}
-        aria-label="Send message"
+        aria-label={locked ? 'Send a gift to keep chatting' : 'Send message'}
       >
         <ArrowRight
           className="size-[18px]"
-          style={{ color: hasText ? '#FFF' : 'var(--vm-text-tertiary)' }}
+          style={{ color: hasText || locked ? '#FFF' : 'var(--vm-text-tertiary)' }}
         />
       </button>
     </div>
