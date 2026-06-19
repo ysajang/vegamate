@@ -1,13 +1,14 @@
 import { NextRequest, after } from 'next/server';
 import { createServerSupabase, createServiceRoleClient } from '@/lib/supabase/server';
-import { apiSuccess, apiError, withErrorHandler, AppError } from '@/lib/api-utils';
+import { apiError, withErrorHandler, AppError } from '@/lib/api-utils';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { sanitizeString, isValidUUID } from '@/lib/validators';
 import { HEART_CONFIG, LLM_CONFIG } from '@/config/constants';
 import { assertAgeVerified } from '@/lib/auth/age-guard';
 import { evaluateSelfieGuard } from '@/lib/chat/selfie-trigger';
 import { getCharacterScenes } from '@/lib/chat/selfie-context';
-import { generateAIResponse } from '@/lib/chat/ai-service';
+import { generateAIResponseStream } from '@/lib/chat/ai-service';
+import { encodeStreamEvent, type StreamEvent } from '@/lib/chat/stream-protocol';
 import {
   fetchUserMemories,
   formatMemoriesForPrompt,
@@ -86,14 +87,52 @@ async function handler(req: NextRequest) {
 
   const character = conversation.character as DbCharacter;
 
-  // 5. Check hearts (replaces credit check)
+  // 5. Check hearts + load context in PARALLEL.
+  // Everything that doesn't depend on the heart-consumption result is fired
+  // concurrently so the slowest single round-trip (not their sum) gates the LLM
+  // start. This directly cuts time-to-first-token on every turn.
+  //
+  //   subCheck   — needed to decide whether to consume a heart (gates consume).
+  //   userMsg    — persist the user's message (independent).
+  //   lastUpd    — bump conversation last_user_message_at (independent;
+  //                isComeback below reads the PRIOR value off `conversation`,
+  //                so this update racing is fine).
+  //   historyRes — recent history for AI context (independent).
+  //   memoryRes  — user memories for prompt context (independent, best-effort).
+  //
   // Active subscribers are promised unlimited conversation — they must never
-  // consume hearts nor hit the gift gate. Checked BEFORE consume_heart
-  // (previously only checked deep in the intimacy block, so subscribers were
-  // being charged hearts: a direct breach of the subscription perk).
-  const subCheck = await serviceClient.rpc('get_active_subscription', {
-    p_user_id: user.id,
-  });
+  // consume hearts nor hit the gift gate. consume_heart is therefore gated on
+  // the subscription result and run right after the parallel batch resolves.
+  const [subCheck, userMsgRes, , historyRes, memoryRes] = await Promise.all([
+    serviceClient.rpc('get_active_subscription', { p_user_id: user.id }),
+    serviceClient
+      .from('messages')
+      .insert({
+        conversation_id: conversationId,
+        role: 'user',
+        content_type: 'text',
+        content,
+        credits_consumed: HEART_CONFIG.COST_PER_TURN,
+      })
+      .select()
+      .single(),
+    serviceClient
+      .from('conversations')
+      .update({ last_user_message_at: new Date().toISOString() })
+      .eq('id', conversationId),
+    serviceClient
+      .from('messages')
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(30),
+    fetchUserMemories(serviceClient, user.id, character.id).catch((err) => {
+      console.warn('[Chat] Memory fetch failed (continuing without):', err);
+      return [] as import('@/types').MemoryRow[];
+    }),
+  ]);
+
   const isSubscriber = Boolean(subCheck.data?.active);
 
   const { data: heartBalance } = isSubscriber
@@ -135,56 +174,24 @@ async function handler(req: NextRequest) {
   // returned-0 "last heart" case is nudge='low' and NOT exhausted, so that
   // final paid turn behaves like a normal low-balance turn.
 
-  // 6. Save user message
-  const { data: userMsg, error: userMsgError } = await serviceClient
-    .from('messages')
-    .insert({
-      conversation_id: conversationId,
-      role: 'user',
-      content_type: 'text',
-      content,
-      credits_consumed: HEART_CONFIG.COST_PER_TURN,
-    })
-    .select()
-    .single();
+  // 6. User message — from the parallel batch above.
+  const { data: userMsg, error: userMsgError } = userMsgRes;
 
   if (userMsgError || !userMsg) {
     console.error('[Chat] Failed to save user message:', userMsgError);
     throw new AppError('Failed to send message', 500);
   }
 
-  // Update conversation last_user_message_at
-  await serviceClient
-    .from('conversations')
-    .update({ last_user_message_at: new Date().toISOString() })
-    .eq('id', conversationId);
+  // 7. Recent message history for AI context — from the parallel batch.
+  // Newest-first from the DB; reverse to chronological for the model. (Loading
+  // ascending+limit would have pinned the AI to the OLDEST 30 messages once a
+  // conversation grew past 30 turns, causing context loss / topic fixation.)
+  const history = ((historyRes.data || []) as DbMessage[]).slice().reverse();
 
-  // 7. Load recent message history for AI context.
-  // Must be the MOST RECENT messages: ordering ascending with a limit loaded
-  // the OLDEST 30, so once a conversation passed 30 messages the AI was stuck
-  // seeing only the opening exchange (e.g. early "you created me" role-play)
-  // and never the latest turns — causing context loss and topic fixation.
-  // Order descending (newest first), then reverse to chronological for the model.
-  const { data: historyRows } = await serviceClient
-    .from('messages')
-    .select('*')
-    .eq('conversation_id', conversationId)
-    .is('deleted_at', null)
-    .order('created_at', { ascending: false })
-    .limit(30);
-
-  const history = ((historyRows || []) as DbMessage[]).slice().reverse();
-
-  // 7.5. Fetch user memories and build prompt context (non-blocking if fails)
-  let memoryContext = '';
-  let existingMemories: import('@/types').MemoryRow[] = [];
-  try {
-    existingMemories = await fetchUserMemories(serviceClient, user.id, character.id);
-    memoryContext = formatMemoriesForPrompt(existingMemories);
-  } catch (err) {
-    console.warn('[Chat] Memory fetch failed (continuing without):', err);
-    existingMemories = [];
-  }
+  // 7.5. User memories for prompt context — from the parallel batch
+  // (best-effort: a fetch failure already resolved to []).
+  const existingMemories = memoryRes;
+  const memoryContext = formatMemoriesForPrompt(existingMemories);
 
   // 8. Selfie frequency guard (anti-spam only — the AI decides whether to
   //    actually send one, based on whether a photo fits the moment).
@@ -217,18 +224,37 @@ async function handler(req: NextRequest) {
     }
   }
 
-  // 9. Generate AI response — the AI decides if/what selfie via [SELFIE:scene]
-  const aiResult = await generateAIResponse({
-    character,
-    history,
-    userMessage: content,
-    selfieAllowed: guard.allowed,
-    availableScenes,
-    memoryContext,
-    messageCount: conversation.message_count,
-    heartsRemaining,
-    giftNudge: balanceState.nudge,
-  });
+  // 9. Generate AI response as a STREAM. We return an NDJSON stream: `delta`
+  // events carry incremental reply text (rendered immediately by the client),
+  // then a single terminal `meta` event carries all business data (saved
+  // messages, hearts, gift, exhausted flag, upgrade prompt) once post-
+  // processing + DB writes finish. This collapses perceived latency from
+  // full-generation time to first-token time without changing any downstream
+  // logic — the client just receives the same fields via `meta` instead of a
+  // one-shot JSON body.
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = (ev: StreamEvent) => {
+        controller.enqueue(encoder.encode(encodeStreamEvent(ev)));
+      };
+
+      try {
+        const aiResult = await generateAIResponseStream(
+          {
+            character,
+            history,
+            userMessage: content,
+            selfieAllowed: guard.allowed,
+            availableScenes,
+            memoryContext,
+            messageCount: conversation.message_count,
+            heartsRemaining,
+            giftNudge: balanceState.nudge,
+          },
+          (text) => send({ t: 'delta', v: text })
+        );
 
   // The AI's choice drives selfie sending (crisis already suppressed upstream).
   let willSendSelfie = aiResult.sendSelfie && aiResult.crisisSeverity === 'none';
@@ -449,22 +475,49 @@ async function handler(req: NextRequest) {
     }
   });
 
-  // 14. Return response
+  // 14. Terminal meta event — carries everything the one-shot JSON body used to.
+  // The client applies these exactly as before (hearts, gift, exhausted, upgrade)
+  // after rendering the streamed text.
   // hearts_exhausted: true means "this was the user's last free turn — gate the
-  // input AFTER showing this reply + gift card". Never gate on a crisis turn
-  // (support must keep flowing). The character DID respond (begging in-character)
-  // and a gift card is attached via gift_request, so this is a transparent
-  // continue-with-a-gift moment, not a silent system block.
+  // input AFTER showing this reply + gift card". Never gate on a crisis turn.
   const heartsExhausted = giftSurface.heartsExhausted;
 
-  return apiSuccess({
-    user_message: userMsg as DbMessage,
-    message: savedAiMsg as DbMessage,
-    selfie: selfieData,
-    hearts_remaining: heartsRemaining,
-    hearts_exhausted: heartsExhausted,
-    gift_request: effectiveGiftSlug,
-    upgrade_prompt: upgradePrompt,
+        send({
+          t: 'meta',
+          v: {
+            user_message: userMsg as DbMessage,
+            message: savedAiMsg as DbMessage,
+            selfie: selfieData,
+            hearts_remaining: heartsRemaining,
+            hearts_exhausted: heartsExhausted,
+            gift_request: effectiveGiftSlug,
+            upgrade_prompt: upgradePrompt,
+          },
+        });
+        controller.close();
+      } catch (err) {
+        // A failure mid-stream (LLM connection, DB write). The client has
+        // already shown some streamed text; surface an error event so it can
+        // mark the turn failed rather than hang. We don't attempt a partial
+        // AI-message save here — the user message is already persisted, and a
+        // half-generated reply is worse than none.
+        console.error('[Chat] Stream failed:', err);
+        try {
+          send({ t: 'error', v: 'stream_failed' });
+        } catch {
+          // controller may already be closed/errored — ignore.
+        }
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'application/x-ndjson; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+    },
   });
 }
 

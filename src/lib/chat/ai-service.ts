@@ -56,10 +56,187 @@ interface GenerateResponseResult {
 export async function generateAIResponse(
   params: GenerateResponseParams
 ): Promise<GenerateResponseResult> {
-  const { character, history, userMessage, selfieAllowed, availableScenes, memoryContext, messageCount, heartsRemaining, giftNudge } = params;
   const startTime = Date.now();
-
   const anthropic = getAnthropicClient();
+
+  const { systemBlocks, messages, actualSelfieAllowed, crisisSeverity } =
+    buildPromptPayload(params);
+
+  // ── API call with retry on transient errors ──
+  const response = await withRetry(() =>
+    anthropic.messages.create({
+      model: LLM_CONFIG.MODEL,
+      system: systemBlocks,
+      messages,
+      max_tokens: LLM_CONFIG.MAX_TOKENS,
+      temperature: LLM_CONFIG.TEMPERATURE,
+    })
+  );
+
+  // Extract text from response content blocks
+  const responseContent = response.content
+    .filter((block): block is Anthropic.Messages.TextBlock => block.type === 'text')
+    .map((block) => block.text)
+    .join('');
+
+  const tokensUsed =
+    (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0);
+
+  return {
+    ...finalizeResponse(responseContent, actualSelfieAllowed),
+    tokensUsed,
+    responseTimeMs: Date.now() - startTime,
+    crisisSeverity,
+  };
+}
+
+/**
+ * Streaming variant. Identical prompt construction and post-processing as
+ * generateAIResponse, but emits incremental text via `onDelta` so the client
+ * can render tokens as they arrive (cuts perceived time-to-first-token from
+ * full-generation latency down to first-token latency). Resolves with the same
+ * GenerateResponseResult once the stream completes, so all downstream business
+ * logic (selfie pick, gift parse, DB save, intimacy) is unchanged.
+ *
+ * IMPORTANT: the selfie/gift markers live at the END of the reply, so we never
+ * stream a partial marker to the user — we strip markers only AFTER the full
+ * text is assembled (finalizeResponse). To avoid leaking a marker mid-stream,
+ * deltas are forwarded as-is but the final saved `content` is the cleaned text;
+ * the client reconciles to the cleaned text on the terminal meta event.
+ */
+export async function generateAIResponseStream(
+  params: GenerateResponseParams,
+  onDelta: (text: string) => void
+): Promise<GenerateResponseResult> {
+  const startTime = Date.now();
+  const anthropic = getAnthropicClient();
+
+  const { systemBlocks, messages, actualSelfieAllowed, crisisSeverity } =
+    buildPromptPayload(params);
+
+  // messages.stream() returns a MessageStream synchronously; the network work
+  // happens during iteration. We don't wrap it in withRetry (which expects a
+  // Promise) — a connection failure surfaces on first iteration and the route
+  // handles partial-save rather than transparently retrying mid-stream.
+  const stream = anthropic.messages.stream({
+    model: LLM_CONFIG.MODEL,
+    system: systemBlocks,
+    messages,
+    max_tokens: LLM_CONFIG.MAX_TOKENS,
+    temperature: LLM_CONFIG.TEMPERATURE,
+  });
+
+  let full = '';
+  // Suppress streaming of a trailing marker: hold back text from the first '['
+  // that could begin a [SELFIE.../[GIFT... marker until we know it's real.
+  // Simpler + robust: forward deltas, but never forward a chunk once we've seen
+  // a '\n[' marker opener. We track a small tail and stop forwarding after an
+  // opener is detected; the cleaned final text comes via meta anyway.
+  let markerOpened = false;
+
+  for await (const event of stream) {
+    if (
+      event.type === 'content_block_delta' &&
+      event.delta.type === 'text_delta'
+    ) {
+      const piece = event.delta.text;
+      full += piece;
+
+      if (!markerOpened) {
+        // Detect the start of a marker line so we stop leaking it to the UI.
+        // Markers are emitted on their own final line: "\n[SELFIE..." / "[GIFT..."
+        const markerIdx = findMarkerOpener(full);
+        if (markerIdx !== -1) {
+          markerOpened = true;
+          // Forward only the portion before the marker that we haven't sent yet.
+          const cleanSoFar = full.slice(0, markerIdx);
+          const alreadySent = full.length - piece.length;
+          if (cleanSoFar.length > alreadySent) {
+            onDelta(cleanSoFar.slice(alreadySent));
+          }
+          continue;
+        }
+        onDelta(piece);
+      }
+      // Once markerOpened, withhold all further text (it's the marker tail).
+    }
+  }
+
+  const message = await stream.finalMessage();
+  const tokensUsed =
+    (message.usage?.input_tokens || 0) + (message.usage?.output_tokens || 0);
+
+  return {
+    ...finalizeResponse(full, actualSelfieAllowed),
+    tokensUsed,
+    responseTimeMs: Date.now() - startTime,
+    crisisSeverity,
+  };
+}
+
+/**
+ * Locate the index where a trailing [SELFIE...] / [GIFT...] marker line begins,
+ * so streaming can stop before leaking it. Returns -1 if no opener present.
+ * We look for a '[' that starts a known marker keyword (optionally preceded by
+ * a newline), which is where the marker line begins.
+ */
+function findMarkerOpener(text: string): number {
+  const patterns = [/\n?\[SELFIE/i, /\n?\[GIFT/i];
+  let earliest = -1;
+  for (const re of patterns) {
+    const m = re.exec(text);
+    if (m && (earliest === -1 || m.index < earliest)) earliest = m.index;
+  }
+  return earliest;
+}
+
+/**
+ * Shared post-processing: strip selfie/gift markers and derive selfie fields.
+ * Used by both the buffered and streaming paths so behavior is identical.
+ */
+function finalizeResponse(
+  responseContent: string,
+  actualSelfieAllowed: boolean
+): Pick<
+  GenerateResponseResult,
+  'content' | 'selfieCaption' | 'selfieScene' | 'sendSelfie'
+> {
+  let content = responseContent;
+  let selfieCaption: string | null = null;
+  let selfieScene: string | null = null;
+  let sendSelfie = false;
+
+  const marker = parseSelfieMarker(responseContent);
+  if (actualSelfieAllowed) {
+    if (marker) {
+      sendSelfie = true;
+      selfieScene = marker.scene;
+      content = marker.cleanContent;
+      selfieCaption = content || null;
+    }
+  } else if (marker) {
+    // Safety: strip any stray marker the model emitted while forbidden.
+    content = marker.cleanContent;
+  }
+
+  return { content, selfieCaption, selfieScene, sendSelfie };
+}
+
+interface PromptPayload {
+  systemBlocks: Anthropic.Messages.TextBlockParam[];
+  messages: Anthropic.Messages.MessageParam[];
+  actualSelfieAllowed: boolean;
+  crisisSeverity: 'none' | 'soft' | 'strong';
+}
+
+/**
+ * Build the Anthropic system prompt + message array from request params.
+ * Extracted so the buffered and streaming generators share one source of truth
+ * for persona, language directive, relationship stage, gift/selfie/crisis
+ * context, and prompt caching.
+ */
+function buildPromptPayload(params: GenerateResponseParams): PromptPayload {
+  const { character, history, userMessage, selfieAllowed, availableScenes, memoryContext, messageCount, heartsRemaining, giftNudge } = params;
 
   // Crisis detection (keyword-based first pass — model provides second pass).
   // Pass recent user messages so a dangerous follow-up right after a strong
@@ -238,56 +415,10 @@ Do not send any photo of yourself in this reply, regardless of context. Just tal
   // Add current user message
   messages.push({ role: 'user', content: userMessage });
 
-  // ── API call with retry on transient errors ──
-  const response = await withRetry(() =>
-    anthropic.messages.create({
-      model: LLM_CONFIG.MODEL,
-      system: systemBlocks,
-      messages,
-      max_tokens: LLM_CONFIG.MAX_TOKENS,
-      temperature: LLM_CONFIG.TEMPERATURE,
-    })
-  );
-
-  // Extract text from response content blocks
-  const responseContent = response.content
-    .filter((block): block is Anthropic.Messages.TextBlock => block.type === 'text')
-    .map((block) => block.text)
-    .join('');
-
-  const tokensUsed =
-    (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0);
-
-  // Parse selfie marker — the AI decides whether to include one.
-  let content = responseContent;
-  let selfieCaption: string | null = null;
-  let selfieScene: string | null = null;
-  let sendSelfie = false;
-
-  if (actualSelfieAllowed) {
-    const marker = parseSelfieMarker(responseContent);
-    if (marker) {
-      sendSelfie = true;
-      selfieScene = marker.scene;
-      content = marker.cleanContent;
-      // The cleaned reply text is the caption context for the photo.
-      selfieCaption = content || null;
-    }
-  } else {
-    // Safety: strip any stray marker the model emitted while forbidden.
-    const marker = parseSelfieMarker(responseContent);
-    if (marker) {
-      content = marker.cleanContent;
-    }
-  }
-
   return {
-    content,
-    selfieCaption,
-    selfieScene,
-    sendSelfie,
-    tokensUsed,
-    responseTimeMs: Date.now() - startTime,
+    systemBlocks,
+    messages,
+    actualSelfieAllowed,
     crisisSeverity: crisisResult.severity,
   };
 }

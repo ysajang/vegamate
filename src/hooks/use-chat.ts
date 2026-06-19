@@ -4,6 +4,18 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { DbMessage } from '@/types';
 import { shouldGateInput } from './exhaustion-gate';
+import { StreamDecoder, type StreamEvent } from '@/lib/chat/stream-protocol';
+
+/** Terminal `meta` payload from the chat stream (mirrors the old JSON body). */
+interface ChatMetaPayload {
+  user_message?: DbMessage;
+  message?: DbMessage;
+  selfie: unknown;
+  hearts_remaining: number;
+  hearts_exhausted: boolean;
+  gift_request: string | null;
+  upgrade_prompt: { tier: 'deeper' | 'lover'; stage: number } | null;
+}
 
 interface UseChatOptions {
   conversationId: string;
@@ -213,11 +225,21 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
                 )
               : -1;
 
+            // If the saved AI message arrives via Realtime while we're still
+            // streaming its tokens into a `streaming-` placeholder, replace the
+            // placeholder in place so the bubble doesn't briefly duplicate.
+            const streamingIdx = newMessage.role === 'assistant'
+              ? prev.findIndex((m) => m.id.startsWith('streaming-'))
+              : -1;
+
             let merged: DbMessage[];
             if (optimisticIdx >= 0) {
               // Swap optimistic → real in-place (preserves position)
               merged = [...prev];
               merged[optimisticIdx] = newMessage;
+            } else if (streamingIdx >= 0) {
+              merged = [...prev];
+              merged[streamingIdx] = newMessage;
             } else {
               merged = [...prev, newMessage];
             }
@@ -285,6 +307,11 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
 
       setMessages((prev) => [...prev, optimisticMsg]);
 
+      // Streaming AI placeholder — filled token-by-token as deltas arrive, then
+      // reconciled to the authoritative saved message on the terminal `meta`.
+      const streamingId = `streaming-${Date.now()}`;
+      let streamingStarted = false;
+
       try {
         const res = await fetch('/api/chat', {
           method: 'POST',
@@ -295,78 +322,129 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
           }),
         });
 
-        const json = await res.json();
-
-        if (json.success) {
-          // Normal response.
-          // Realtime delivery is best-effort and races with this handler:
-          // the persisted user/AI messages may already be present (realtime
-          // won) or missing (realtime lost/late). So we drop the optimistic
-          // placeholder and merge the authoritative server messages by id,
-          // which is correct regardless of who arrived first. This avoids both
-          // a vanishing user bubble AND a duplicated one.
-          setMessages((prev) => {
-            const realUserMsg = json.data.user_message as DbMessage | undefined;
-            const aiMsg = json.data.message as DbMessage | undefined;
-
-            const byId = new Map<string, DbMessage>();
-            for (const m of prev) {
-              // Drop the optimistic placeholder ONLY if we have an
-              // authoritative replacement for it (server-returned user_message
-              // or one already delivered via realtime). Otherwise keep it, so
-              // the user's bubble never vanishes mid-response.
-              if (m.id === optimisticMsg.id) {
-                const haveReplacement =
-                  !!realUserMsg ||
-                  prev.some(
-                    (x) =>
-                      x.role === 'user' &&
-                      x.id !== optimisticMsg.id &&
-                      x.content === optimisticMsg.content
-                  );
-                if (haveReplacement) continue;
-              }
-              byId.set(m.id, m);
-            }
-            if (realUserMsg) byId.set(realUserMsg.id, realUserMsg);
-            if (aiMsg) byId.set(aiMsg.id, aiMsg);
-
-            return Array.from(byId.values()).sort(
-              (a, b) =>
-                new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-            );
-          });
-          setHeartsRemaining(json.data.hearts_remaining);
-
-          // Check for gift request
-          if (json.data.gift_request) {
-            setLastGiftRequest(json.data.gift_request);
-          }
-
-          // Out-of-messages: the character DID reply (begging in-character) and
-          // a gift card is attached above. Now gate the input — the next turn
-          // needs a gift. This is set AFTER the reply renders, so the user sees
-          // the response + gift card, not a bare wall. (Not set on crisis turns:
-          // the server omits hearts_exhausted then so support keeps flowing.)
-          if (json.data.hearts_exhausted) {
-            setHeartsExhausted(true);
-            setHeartsRemaining(0);
-          }
-
-          // Check for in-chat upgrade prompt (emotional peak)
-          if (json.data.upgrade_prompt) {
-            setUpgradePrompt(json.data.upgrade_prompt);
-          }
-        } else {
+        // Pre-stream failures (auth, rate limit, age gate) still return JSON.
+        const contentType = res.headers.get('content-type') || '';
+        if (!res.ok || !res.body || contentType.includes('application/json')) {
+          const json = await res.json().catch(() => null);
           setMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
-          if (json.code === 'AGE_NOT_VERIFIED') {
+          if (json?.code === 'AGE_NOT_VERIFIED') {
             window.location.href = '/onboarding';
             return;
           }
-          setError(json.error || 'Failed to send message');
+          setError(json?.error || 'Failed to send message');
+          return;
+        }
+
+        const reader = res.body.getReader();
+        const textDecoder = new TextDecoder();
+        const decoder = new StreamDecoder();
+        let streamedText = '';
+        let metaPayload: ChatMetaPayload | null = null;
+        let streamError = false;
+
+        const applyDelta = (text: string) => {
+          streamedText += text;
+          if (!streamingStarted) {
+            streamingStarted = true;
+            // Insert the streaming bubble once the first token arrives.
+            const placeholder: DbMessage = {
+              id: streamingId,
+              conversation_id: conversationId,
+              role: 'assistant',
+              content_type: 'text',
+              content: streamedText,
+              selfie_id: null,
+              selfie_rarity: null,
+              credits_consumed: 0,
+              is_proactive: false,
+              metadata: null,
+              created_at: new Date().toISOString(),
+            };
+            setMessages((prev) => [...prev, placeholder]);
+          } else {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === streamingId ? { ...m, content: streamedText } : m
+              )
+            );
+          }
+        };
+
+        const handleEvent = (ev: StreamEvent) => {
+          if (ev.t === 'delta') applyDelta(ev.v);
+          else if (ev.t === 'meta') metaPayload = ev.v as ChatMetaPayload;
+          else if (ev.t === 'error') streamError = true;
+        };
+
+        // Read the NDJSON stream to completion.
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = textDecoder.decode(value, { stream: true });
+          for (const ev of decoder.push(chunk)) handleEvent(ev);
+        }
+        for (const ev of decoder.flush()) handleEvent(ev);
+
+        if (streamError || !metaPayload) {
+          // Drop optimistic + streaming bubble; show error.
+          setMessages((prev) =>
+            prev.filter((m) => m.id !== optimisticMsg.id && m.id !== streamingId)
+          );
+          setError('Failed to send message');
+          return;
+        }
+
+        // Reconcile: replace optimistic user bubble + streaming bubble with the
+        // authoritative server messages, exactly as the non-streaming path did.
+        const meta = metaPayload as ChatMetaPayload;
+        setMessages((prev) => {
+          const realUserMsg = meta.user_message;
+          const aiMsg = meta.message;
+
+          const byId = new Map<string, DbMessage>();
+          for (const m of prev) {
+            if (m.id === optimisticMsg.id) {
+              const haveReplacement =
+                !!realUserMsg ||
+                prev.some(
+                  (x) =>
+                    x.role === 'user' &&
+                    x.id !== optimisticMsg.id &&
+                    x.content === optimisticMsg.content
+                );
+              if (haveReplacement) continue;
+            }
+            // Always drop the streaming placeholder — the saved AI message
+            // (cleaned of markers, with selfie attached) replaces it.
+            if (m.id === streamingId) continue;
+            byId.set(m.id, m);
+          }
+          if (realUserMsg) byId.set(realUserMsg.id, realUserMsg);
+          if (aiMsg) byId.set(aiMsg.id, aiMsg);
+
+          return Array.from(byId.values()).sort(
+            (a, b) =>
+              new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          );
+        });
+        setHeartsRemaining(meta.hearts_remaining);
+
+        if (meta.gift_request) {
+          setLastGiftRequest(meta.gift_request);
+        }
+
+        if (meta.hearts_exhausted) {
+          setHeartsExhausted(true);
+          setHeartsRemaining(0);
+        }
+
+        if (meta.upgrade_prompt) {
+          setUpgradePrompt(meta.upgrade_prompt);
         }
       } catch {
-        setMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
+        setMessages((prev) =>
+          prev.filter((m) => m.id !== optimisticMsg.id && m.id !== streamingId)
+        );
         setError('Network error. Please try again.');
       } finally {
         setIsSending(false);

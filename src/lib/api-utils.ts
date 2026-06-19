@@ -31,9 +31,9 @@ export function apiError(
 
 /** Wrap API route handler with error catching */
 export function withErrorHandler<TArgs extends unknown[]>(
-  handler: (req: NextRequest, ...args: TArgs) => Promise<NextResponse>
+  handler: (req: NextRequest, ...args: TArgs) => Promise<NextResponse | Response>
 ) {
-  return async (req: NextRequest, ...args: TArgs): Promise<NextResponse> => {
+  return async (req: NextRequest, ...args: TArgs): Promise<NextResponse | Response> => {
     try {
       return await handler(req, ...args);
     } catch (error) {
