@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import type { DbGift } from '@/types';
+import { resolvePurchaseOutcome } from './purchase-outcome';
 
 interface GiftButtonProps {
   giftSlug: string;
@@ -21,6 +22,8 @@ export function GiftButton({
 }: GiftButtonProps) {
   const [gift, setGift] = useState<Pick<DbGift, 'emoji' | 'name' | 'price_usd'> | null>(null);
   const [loading, setLoading] = useState(false);
+  /** User-facing message when the purchase can't proceed (blocked / error / popup). */
+  const [notice, setNotice] = useState<string | null>(null);
 
   // Fetch gift details from cache or API
   useEffect(() => {
@@ -46,6 +49,7 @@ export function GiftButton({
   const handlePurchase = async () => {
     if (loading) return;
     setLoading(true);
+    setNotice(null);
     onPurchaseStart?.();
 
     try {
@@ -58,15 +62,33 @@ export function GiftButton({
         }),
       });
 
-      const json = await res.json();
+      const json = await res.json().catch(() => null);
+      const outcome = resolvePurchaseOutcome(json);
 
-      if (json.success && json.data.checkout_url) {
-        // Open Creem checkout
-        window.open(json.data.checkout_url, '_blank');
-        onPurchaseComplete?.();
+      switch (outcome.kind) {
+        case 'redirect': {
+          const win = window.open(outcome.url, '_blank');
+          if (!win) {
+            // Popup blocked — give the user a way through instead of a dead button.
+            setNotice('Please allow popups to complete your gift, then tap again.');
+          } else {
+            onPurchaseComplete?.();
+          }
+          break;
+        }
+        case 'age_gate':
+          // Inline age verification lives in the gift sheet; guide the user there.
+          setNotice('A quick age check is needed first — open the gift menu to verify.');
+          break;
+        case 'notice':
+          setNotice(outcome.message);
+          break;
+        case 'error':
+          setNotice(outcome.message);
+          break;
       }
     } catch {
-      // Silent
+      setNotice('Network error. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -75,24 +97,34 @@ export function GiftButton({
   if (!gift) return null;
 
   return (
-    <button
-      onClick={handlePurchase}
-      disabled={loading}
-      className="mt-2 inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[13px] font-medium transition-all duration-200 active:scale-95 disabled:opacity-50"
-      style={{
-        background: 'rgba(124, 58, 237, 0.12)',
-        color: 'var(--vm-purple-soft)',
-        border: '1px solid rgba(124, 58, 237, 0.2)',
-      }}
-    >
-      <span className="text-base">{gift.emoji}</span>
-      <span>
-        {loading
-          ? 'Opening...'
-          : characterName
-            ? `Gift for ${characterName} — ${gift.name} $${Number(gift.price_usd).toFixed(2)}`
-            : `${gift.name} $${Number(gift.price_usd).toFixed(2)}`}
-      </span>
-    </button>
+    <div className="mt-2 flex flex-col gap-1">
+      <button
+        onClick={handlePurchase}
+        disabled={loading}
+        className="inline-flex items-center gap-1.5 self-start rounded-full px-3.5 py-2 text-[13px] font-medium transition-all duration-200 active:scale-95 disabled:opacity-50"
+        style={{
+          background: 'rgba(124, 58, 237, 0.12)',
+          color: 'var(--vm-purple-soft)',
+          border: '1px solid rgba(124, 58, 237, 0.2)',
+        }}
+      >
+        <span className="text-base">{gift.emoji}</span>
+        <span>
+          {loading
+            ? 'Opening...'
+            : characterName
+              ? `Gift for ${characterName} — ${gift.name} $${Number(gift.price_usd).toFixed(2)}`
+              : `${gift.name} $${Number(gift.price_usd).toFixed(2)}`}
+        </span>
+      </button>
+      {notice && (
+        <span
+          className="text-[12px]"
+          style={{ color: 'var(--vm-text-tertiary)' }}
+        >
+          {notice}
+        </span>
+      )}
+    </div>
   );
 }

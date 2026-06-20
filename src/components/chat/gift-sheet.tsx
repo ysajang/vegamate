@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { AgeVerifyInline } from './age-verify-inline';
+import { resolvePurchaseOutcome } from './purchase-outcome';
 
 interface GiftItem {
   id: string;
@@ -68,28 +69,28 @@ export function GiftSheet({
         }),
       });
 
-      const json = await res.json();
+      const json = await res.json().catch(() => null);
+      const outcome = resolvePurchaseOutcome(json);
 
-      if (json.success && json.data?.checkout_url) {
-        window.open(json.data.checkout_url, '_blank');
-        return;
-      }
-
-      // Spending guard outcomes — previously ignored, which made the buy
-      // button appear dead. Each gets explicit, in-tone handling.
-      if (json.success && json.data?.blocked) {
-        if (json.data.reason === 'age_gate') {
+      switch (outcome.kind) {
+        case 'redirect': {
+          const win = window.open(outcome.url, '_blank');
+          if (!win) {
+            setNotice('Please allow popups to complete your gift, then try again.');
+          }
+          break;
+        }
+        case 'age_gate':
           setPendingSlug(slug);
           setNeedsAgeVerify(true);
-        } else if (json.data.reason === 'daily_cap') {
-          setNotice("You've been so generous today 💝 Daily gift limit reached — see you tomorrow!");
-        } else if (json.data.reason === 'cooldown') {
-          setNotice('Just a moment between gifts — please try again shortly.');
-        }
-        return;
+          break;
+        case 'notice':
+          setNotice(outcome.message);
+          break;
+        case 'error':
+          setNotice(outcome.message);
+          break;
       }
-
-      setNotice("Something went wrong starting the payment. Please try again.");
     } catch {
       setNotice('Network error. Please try again.');
     } finally {
