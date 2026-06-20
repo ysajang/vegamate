@@ -40,6 +40,7 @@ export interface DbCharacter {
   gender: 'female' | 'male';
   persona_prompt: string;
   greeting_message: string;
+  greeting_i18n: Record<string, string>;
   avatar_url: string;
   personality_tags: string[];
   sort_order: number;

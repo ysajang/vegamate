@@ -3,6 +3,7 @@ import { createServerSupabase, createServiceRoleClient } from '@/lib/supabase/se
 import { apiSuccess, apiError, withErrorHandler, AppError } from '@/lib/api-utils';
 import { sanitizeString, isValidUUID } from '@/lib/validators';
 import { assertAgeVerified } from '@/lib/auth/age-guard';
+import { pickGreeting } from '@/lib/chat/greeting';
 
 // GET /api/conversations -> list user's conversations with character data
 async function getHandler(req: NextRequest) {
@@ -107,11 +108,24 @@ async function postHandler(req: NextRequest) {
   }
 
   // Insert greeting message from character (free - no credits)
+  // 유저 선호 언어로 첫 인사 선택. greeting_i18n[lang] -> en -> greeting_message 폴백.
+  const { data: greetProfile } = await serviceClient
+    .from('profiles')
+    .select('preferred_language')
+    .eq('id', user.id)
+    .single();
+
+  const greetingText = pickGreeting(
+    character.greeting_i18n,
+    greetProfile?.preferred_language,
+    character.greeting_message
+  );
+
   await serviceClient.from('messages').insert({
     conversation_id: newConversation.id,
     role: 'assistant',
     content_type: 'text',
-    content: character.greeting_message,
+    content: greetingText,
     credits_consumed: 0,
     metadata: { is_greeting: true },
   });
