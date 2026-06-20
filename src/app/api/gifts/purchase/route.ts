@@ -8,6 +8,7 @@ import { isPayPalActive } from '@/lib/payments/provider';
 import { getOrdersController } from '@/lib/payments/paypal/client';
 import {
   CheckoutPaymentIntent,
+  PayeePaymentMethodPreference,
   PaypalExperienceLandingPage,
   PaypalExperienceUserAction,
 } from '@paypal/paypal-server-sdk';
@@ -219,10 +220,17 @@ async function createPayPalGiftOrder({
           },
         ],
         // Guest card checkout: experience_context is the SDK-recommended home
-        // for these fields (application_context is deprecated). landingPage was
-        // previously unset, so PayPal defaulted to LOGIN — forcing the account
-        // login screen before the card form. GUEST_CHECKOUT surfaces the
-        // "Debit or Credit Card" form first, reducing impulse-buy drop-off.
+        // for these fields (application_context is deprecated).
+        //
+        // Two settings together surface the "Debit or Credit Card" form first:
+        //  - landingPage=GUEST_CHECKOUT: pick the guest (card) landing page
+        //    instead of the account-login page.
+        //  - paymentMethodPreference=IMMEDIATE_PAYMENT_REQUIRED: exclude
+        //    deferred methods (Pay Later / balance) so PayPal resolves to an
+        //    immediate-pay flow. Without this, GUEST_CHECKOUT alone can still
+        //    fall back to the login/wallet screen — this was why the card form
+        //    did not appear after the previous landingPage-only change.
+        //
         // NOTE: PayPal may still force login by IP/risk in some markets; this
         // only guarantees the option is offered, not that guest is permitted.
         paymentSource: {
@@ -230,6 +238,7 @@ async function createPayPalGiftOrder({
             experienceContext: {
               brandName: 'VegaMate',
               landingPage: PaypalExperienceLandingPage.GuestCheckout,
+              paymentMethodPreference: PayeePaymentMethodPreference.ImmediatePaymentRequired,
               userAction: PaypalExperienceUserAction.PayNow,
               returnUrl: `${APP_CONFIG.url}/payment/return?type=gift&tx=${tx.id}`,
               cancelUrl: `${APP_CONFIG.url}/payment/return?type=gift&tx=${tx.id}&cancelled=true`,
