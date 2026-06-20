@@ -28,7 +28,18 @@ async function getHandler(req: NextRequest) {
     throw new AppError('Failed to load conversations', 500);
   }
 
-  return apiSuccess({ conversations: conversations || [] });
+  // Viewer's timezone for client-side message timestamp rendering.
+  // 메시지 버블 시각을 브라우저 로컬이 아닌 profiles.timezone 기준으로 렌더하기 위함.
+  const { data: tzProfile } = await supabase
+    .from('profiles')
+    .select('timezone')
+    .eq('id', user.id)
+    .single();
+
+  return apiSuccess({
+    conversations: conversations || [],
+    timezone: tzProfile?.timezone ?? null,
+  });
 }
 
 // POST /api/conversations -> start conversation with a character

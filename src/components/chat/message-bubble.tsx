@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import Image from 'next/image';
 import { CharacterAvatar } from '@/components/common';
+import { formatMessageTime } from '@/lib/format-time';
 import type { DbMessage, DbSelfie, SelfieRarity } from '@/types';
 
 /** Visual-only rarity borders — no text exposed */
@@ -109,6 +110,8 @@ interface MessageBubbleProps {
   characterName?: string;
   /** Accent color for character avatar fallback */
   accentColor?: string;
+  /** Viewer timezone (profiles.timezone) for timestamp rendering; null -> browser local */
+  timezone?: string | null;
   /** Gift slug if this message contains a gift request */
   giftSlug?: string | null;
   /** Character ID for gift purchase */
@@ -124,6 +127,7 @@ export function MessageBubble({
   characterAvatar,
   characterName,
   accentColor = 'var(--vm-rose)',
+  timezone,
   giftSlug,
   characterId,
   onEditMessage,
@@ -176,11 +180,8 @@ export function MessageBubble({
     setSheetOpen(false);
   };
 
-  // Time formatting
-  const time = new Date(message.created_at).toLocaleTimeString([], {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  // Time formatting — profiles.timezone 기준 (없으면 브라우저 로컬 폴백)
+  const time = formatMessageTime(message.created_at, timezone);
 
   return (
     <div

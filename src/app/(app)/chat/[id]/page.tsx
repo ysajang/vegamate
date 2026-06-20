@@ -20,6 +20,7 @@ interface ChatPageProps {
 export default function ChatPage({ params }: ChatPageProps) {
   const { id: conversationId } = use(params);
   const [character, setCharacter] = useState<DbCharacter | null>(null);
+  const [viewerTimezone, setViewerTimezone] = useState<string | null>(null);
   const [pageLoading, setPageLoading] = useState(true);
   const [giftSheetOpen, setGiftSheetOpen] = useState(false);
   // Timestamp of the last gift-sheet close, for the anti-flicker reopen guard
@@ -86,6 +87,7 @@ export default function ChatPage({ params }: ChatPageProps) {
           if (conv?.character) {
             if (!cancelled) {
               setCharacter(conv.character as DbCharacter);
+              setViewerTimezone(json.data.timezone ?? null);
               setPageLoading(false);
             }
             return;
@@ -322,6 +324,7 @@ export default function ChatPage({ params }: ChatPageProps) {
                   characterAvatar={character.avatar_url}
                   characterName={character.name}
                   accentColor={accentColor}
+                  timezone={viewerTimezone}
                   giftSlug={showGiftButton ? lastGiftRequest : null}
                   characterId={character.id}
                   onEditMessage={editMessage}
