@@ -21,6 +21,7 @@ import { extractMemories } from '@/lib/chat/memory-extraction';
 import { MEMORY_CONFIG } from '@/config/constants';
 import { parseGiftMarker } from '@/lib/chat/gift-parser';
 import { resolveBalanceState, resolveGiftSurface } from '@/lib/chat/gift-nudge';
+import { ensureBegLine } from '@/lib/chat/beg-line';
 import {
   computeTurnIntimacyPoints,
   shouldShowUpgradePrompt,
@@ -316,6 +317,20 @@ async function handler(req: NextRequest) {
   });
   const effectiveGiftSlug = giftSurface.giftSlug;
 
+  // Guarantee a VISIBLE beg at zero balance. The gift card is force-surfaced
+  // above, but Haiku often ignores the zero directive and replies normally —
+  // leaving a silent card with no begging text. When the model didn't beg
+  // (no [GIFT] marker emitted), append a short persona-matched beg line so the
+  // monetization trigger never depends on model compliance. Natural model begs
+  // (marker present) are kept untouched. Suppressed on crisis turns.
+  const baseContent = giftMarker ? giftMarker.cleanContent : aiResult.content;
+  const finalContent = ensureBegLine(baseContent, {
+    nudge: balanceState.nudge,
+    slug: character.slug || 'default',
+    isCrisis: giftSuppressedByCrisis,
+    aiBegged: giftMarker !== null,
+  });
+
   // 12. Save AI response message
   const aiMessage: {
     conversation_id: string;
@@ -330,7 +345,7 @@ async function handler(req: NextRequest) {
     conversation_id: conversationId,
     role: 'assistant',
     content_type: selfieData ? 'text_with_selfie' : 'text',
-    content: giftMarker ? giftMarker.cleanContent : aiResult.content,
+    content: finalContent,
     credits_consumed: 0, // selfies no longer cost hearts
     metadata: {
       model_used: LLM_CONFIG.MODEL,

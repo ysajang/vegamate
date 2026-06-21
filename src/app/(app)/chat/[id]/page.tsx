@@ -212,6 +212,17 @@ export default function ChatPage({ params }: ChatPageProps) {
     }
   }, [messages, isSending, isLoading]);
 
+  // Reveal the gift card ~1s AFTER the beg message lands, so the line reads
+  // first and the card follows as a beat (requirement: show card 1s after the
+  // last message). Keyed on the gift request so it re-arms per new request.
+  const [revealedGiftKey, setRevealedGiftKey] = useState<string | null>(null);
+  useEffect(() => {
+    if (!lastGiftRequest) return;
+    const t = setTimeout(() => setRevealedGiftKey(lastGiftRequest), 1000);
+    return () => clearTimeout(t);
+  }, [lastGiftRequest]);
+  const giftCardVisible = !!lastGiftRequest && revealedGiftKey === lastGiftRequest;
+
   // Open the gift sheet, respecting the anti-flicker cooldown after a close so
   // a close-tap doesn't immediately reopen it. Used by both the auto-open on
   // exhaustion and the locked-composer tap (the zero-balance payment funnel).
@@ -224,12 +235,14 @@ export default function ChatPage({ params }: ChatPageProps) {
     if (reopen) setGiftSheetOpen(true);
   }, []);
 
-  // Auto-open the gift sheet the moment hearts run out (first beg turn).
+  // Auto-open the gift sheet ~1s after hearts run out, so the beg message lands
+  // first and the sheet follows as a beat (consistent with the delayed card).
   useEffect(() => {
     if (heartsExhausted) {
-      // Fresh exhaustion: clear any stale close timestamp so it opens promptly.
+      // Fresh exhaustion: clear any stale close timestamp so it opens.
       giftSheetClosedAtRef.current = null;
-      setGiftSheetOpen(true);
+      const t = setTimeout(() => setGiftSheetOpen(true), 1000);
+      return () => clearTimeout(t);
     }
   }, [heartsExhausted]);
 
@@ -315,7 +328,8 @@ export default function ChatPage({ params }: ChatPageProps) {
               const showGiftButton =
                 isLastMessage &&
                 msg.role === 'assistant' &&
-                lastGiftRequest;
+                lastGiftRequest &&
+                giftCardVisible;
 
               return (
                 <MessageBubble
