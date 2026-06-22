@@ -6,11 +6,21 @@ import { ensureBegLine, BEG_LINES } from './beg-line';
 // server guarantees a persona-matched beg line when the model didn't beg itself.
 
 describe('ensureBegLine', () => {
-  it('non-zero nudge: returns content unchanged (no beg injected)', () => {
+  it('none nudge: returns content unchanged (no beg injected)', () => {
     const out = ensureBegLine('오늘 뭐했어?', {
-      nudge: 'low', slug: 'miku', isCrisis: false, aiBegged: false,
+      nudge: 'none', slug: 'miku', isCrisis: false, aiBegged: false,
     });
     expect(out).toBe('오늘 뭐했어?');
+  });
+
+  it('low + AI did NOT beg: appends a persona-matched beg line (low now begs too)', () => {
+    const base = '오늘 뭐했어?';
+    const out = ensureBegLine(base, {
+      nudge: 'low', slug: 'miku', isCrisis: false, aiBegged: false,
+    });
+    expect(out).not.toBe(base);
+    expect(out.startsWith(base)).toBe(true);
+    expect(BEG_LINES.miku.some((l) => out.includes(l))).toBe(true);
   });
 
   it('zero + AI already begged (marker present): keep the natural reply', () => {

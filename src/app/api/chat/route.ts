@@ -21,6 +21,7 @@ import { extractMemories } from '@/lib/chat/memory-extraction';
 import { MEMORY_CONFIG } from '@/config/constants';
 import { parseGiftMarker } from '@/lib/chat/gift-parser';
 import { resolveBalanceState, resolveGiftSurface } from '@/lib/chat/gift-nudge';
+import { pickRequestableGift } from '@/lib/chat/gift-picker';
 import { ensureBegLine } from '@/lib/chat/beg-line';
 import {
   computeTurnIntimacyPoints,
@@ -253,6 +254,7 @@ async function handler(req: NextRequest) {
             messageCount: conversation.message_count,
             heartsRemaining,
             giftNudge: balanceState.nudge,
+            intimacyStage: conversation.intimacy_stage ?? 0,
           },
           (text) => send({ t: 'delta', v: text })
         );
@@ -314,6 +316,7 @@ async function handler(req: NextRequest) {
     exhausted: balanceState.exhausted,
     parsedGiftSlug: giftMarker?.giftSlug ?? null,
     isCrisis: giftSuppressedByCrisis,
+    fallbackSlug: pickRequestableGift(conversation.intimacy_stage ?? 0),
   });
   const effectiveGiftSlug = giftSurface.giftSlug;
 

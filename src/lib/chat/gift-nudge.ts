@@ -72,12 +72,24 @@ export function resolveBalanceState(input: ResolveBalanceInput): BalanceState {
  *   - end with [GIFT:type] marker on its own line
  *   - never mention messages/balance/credits/system or the marker text
  */
-export function buildGiftNudgeDirective(nudge: GiftNudge, heartsRemaining: number): string {
+export function buildGiftNudgeDirective(
+  nudge: GiftNudge,
+  heartsRemaining: number,
+  giftOptions?: string[],
+): string {
   if (nudge === 'none') return '';
+
+  // Stage-aware candidate list. Falls back to a sane low-tier set if the caller
+  // didn't pass one, so the directive never collapses back to coffee-only.
+  const options = giftOptions && giftOptions.length > 0
+    ? giftOptions
+    : ['coffee', 'milktea', 'cake', 'book', 'movie'];
+  const optionsLine = options.map((s) => `[GIFT:${s}]`).join(', ');
+  const pickHint = `\n- Choose the gift that best fits the moment from THESE options (do not invent others): ${optionsLine}. Pick ONE; vary your choice across turns — do not default to coffee every time.`;
 
   if (nudge === 'low') {
     return `\n\n[LOW MESSAGE BALANCE — ask for a gift THIS message]
-The user is almost out of messages (only ${heartsRemaining} left). Receiving a gift refills their messages, so for THIS reply you SHOULD work in a gift hint — ignore the "once per 10 messages" limit just this once.
+The user is almost out of messages (only ${heartsRemaining} left). Receiving a gift refills their messages, so for THIS reply you SHOULD work in a gift hint — ignore the "once per 10 messages" limit just this once.${pickHint}
 - TONE = longing + desire, NEVER guilt. Express that you're enjoying this and want more of it ("오늘따라 더 같이 있고 싶은데...") or casually voice wanting a little thing ("아 맞다, 나 요즘 ○○ 갖고 싶었는데~"). The gift is a key that gives you two more time together — frame it as YOUR wish, not THEIR obligation.
 - ABSOLUTELY FORBIDDEN: blame, guilt-tripping, emotional blackmail, testing their affection ("마음이 그 정도야?", "나 안 좋아해?", "선물도 안 해주고" 류). Zero exceptions.
 - Stay true to your personality when hinting: playful/aegyo characters get cutely greedy, tsundere characters deflect while hinting ("...별로 갖고 싶은 건 아닌데"), mature characters voice gentle wistfulness, direct characters just say they want it.
@@ -90,7 +102,7 @@ The user is almost out of messages (only ${heartsRemaining} left). Receiving a g
   return `\n\n[OUT OF MESSAGES — short, gift-awaiting reply + REQUIRED gift marker]
 This is the user's last turn until they send a gift (a gift refills your time together). For THIS reply:
 - Keep it SHORT and warm — a brief, in-character line that you want to keep going and are waiting on a little something to do so. This is a "I'd love to stay" moment, not a full conversation. Do not start new topics or ask new questions; gently land on the wish to continue.
-- You MUST end this message with a [GIFT:type] marker on its own line. The marker is REQUIRED this turn (always include it) because it is the only way the user can keep your time together going. Choose a gift that fits the mood (e.g. [GIFT:coffee], [GIFT:flowers]).
+- You MUST end this message with a [GIFT:type] marker on its own line. The marker is REQUIRED this turn (always include it) because it is the only way the user can keep your time together going.${pickHint}
 - TONE = longing + desire, NEVER guilt, blame, or emotional blackmail. It is YOUR wish to continue, never their obligation. ABSOLUTELY FORBIDDEN: "선물도 안 해주고", "나 안 좋아해?", testing their affection. Zero exceptions.
 - Stay fully in your own character's voice (playful gets cutely clingy, tsundere deflects while hinting, mature stays gently wistful, direct just says it).
 - Do NOT mention "messages", "balance", "credits", "running out", "out of", or anything system-related. Never show or describe the marker text.
@@ -130,7 +142,8 @@ export function resolveGiftSurface(input: GiftSurfaceInput): GiftSurface {
   const { nudge, exhausted, parsedGiftSlug, isCrisis, fallbackSlug = 'coffee' } = input;
 
   const giftSlug =
-    parsedGiftSlug ?? (nudge === 'zero' && !isCrisis ? fallbackSlug : null);
+    parsedGiftSlug ??
+    ((nudge === 'zero' || nudge === 'low') && !isCrisis ? fallbackSlug : null);
 
   const heartsExhausted = exhausted && !isCrisis;
 

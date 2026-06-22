@@ -5,6 +5,7 @@ import { detectCrisis, SAFETY_SYSTEM_PROMPT } from './safety';
 import { getAnthropicClient, withRetry } from './anthropic-client';
 import { parseSelfieMarker } from './selfie-context';
 import { buildGiftNudgeDirective } from './gift-nudge';
+import { giftPoolForStage } from './gift-picker';
 
 interface GenerateResponseParams {
   character: DbCharacter;
@@ -39,6 +40,12 @@ interface GenerateResponseParams {
    * "still respond + beg + gift card") and the service just renders the prompt.
    */
   giftNudge?: import('./gift-nudge').GiftNudge;
+  /**
+   * Relationship intimacy stage (0..4) for THIS conversation. Drives the
+   * stage-aware gift pool: early stages ask for cheap gifts, higher stages
+   * unlock premium asks ("우리 사이에..."). Defaults to 0 when unknown.
+   */
+  intimacyStage?: number;
 }
 
 interface GenerateResponseResult {
@@ -236,7 +243,7 @@ interface PromptPayload {
  * context, and prompt caching.
  */
 function buildPromptPayload(params: GenerateResponseParams): PromptPayload {
-  const { character, history, userMessage, selfieAllowed, availableScenes, memoryContext, messageCount, heartsRemaining, giftNudge } = params;
+  const { character, history, userMessage, selfieAllowed, availableScenes, memoryContext, messageCount, heartsRemaining, giftNudge, intimacyStage } = params;
 
   // Crisis detection (keyword-based first pass — model provides second pass).
   // Pass recent user messages so a dangerous follow-up right after a strong
@@ -332,7 +339,8 @@ Rules:
   // resolveBalanceState; here we just render the matching directive. Crisis
   // always suppresses it — emotional support wins over monetization.
   const effectiveNudge = crisisResult.isCrisis ? 'none' : (giftNudge ?? 'none');
-  const nudgeDirective = buildGiftNudgeDirective(effectiveNudge, heartsRemaining ?? 0);
+  const giftOptions = giftPoolForStage(intimacyStage ?? 0);
+  const nudgeDirective = buildGiftNudgeDirective(effectiveNudge, heartsRemaining ?? 0, giftOptions);
   if (nudgeDirective) {
     dynamicContext += nudgeDirective;
   }

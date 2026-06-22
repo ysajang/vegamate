@@ -264,6 +264,17 @@ async function createPayPalGiftOrder({
       throw new AppError('Payment initiation failed', 500);
     }
 
+    // Card-first hint: append fundingSource=card so PayPal's hosted page tends
+    // to surface the "Debit or Credit Card" form rather than the login/wallet
+    // screen. This complements the server-side GuestCheckout +
+    // ImmediatePaymentRequired settings. NOTE: not officially guaranteed —
+    // PayPal may still force login by IP/risk in some markets — so it is a
+    // best-effort nudge layered on top of the order-level settings, not a
+    // replacement for them. (Confidence: not 100%.)
+    const checkoutUrl = approveLink.includes('fundingSource=')
+      ? approveLink
+      : `${approveLink}${approveLink.includes('?') ? '&' : '?'}fundingSource=card`;
+
     await serviceClient
       .from('gift_transactions')
       .update({ paypal_order_id: result.id })
@@ -272,7 +283,7 @@ async function createPayPalGiftOrder({
     console.log(`[Gift] PayPal order created: order=${result.id} tx=${tx.id} user=${user.id}`);
 
     return apiSuccess({
-      checkout_url: approveLink,
+      checkout_url: checkoutUrl,
       transaction_id: tx.id,
       provider: 'paypal',
     });

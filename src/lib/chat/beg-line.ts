@@ -76,7 +76,7 @@ export interface EnsureBegInput {
 export function ensureBegLine(content: string, input: EnsureBegInput): string {
   const { nudge, slug, isCrisis, aiBegged, pick } = input;
 
-  if (nudge !== 'zero') return content;
+  if (nudge === 'none') return content;
   if (isCrisis) return content;
   if (aiBegged) return content;
 
