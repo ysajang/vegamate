@@ -22,6 +22,7 @@ import { MEMORY_CONFIG } from '@/config/constants';
 import { parseGiftMarker } from '@/lib/chat/gift-parser';
 import { resolveBalanceState, resolveGiftSurface } from '@/lib/chat/gift-nudge';
 import { pickRequestableGift } from '@/lib/chat/gift-picker';
+import { normalizeGiftSlug, hasBegSignal } from '@/lib/chat/gift-normalize';
 import { ensureBegLine } from '@/lib/chat/beg-line';
 import {
   computeTurnIntimacyPoints,
@@ -311,27 +312,40 @@ async function handler(req: NextRequest) {
   // state a card is guaranteed (fallback slug) so the user is never dead-ended
   // by a missed marker; crisis turns suppress the gift and never gate.
   const giftSuppressedByCrisis = aiResult.crisisSeverity !== 'none';
+  const stageForGift = conversation.intimacy_stage ?? 0;
+
+  // Strip the marker first so beg-signal detection runs on the visible text.
+  const baseContent = giftMarker ? giftMarker.cleanContent : aiResult.content;
+
   const giftSurface = resolveGiftSurface({
     nudge: balanceState.nudge,
     exhausted: balanceState.exhausted,
     parsedGiftSlug: giftMarker?.giftSlug ?? null,
     isCrisis: giftSuppressedByCrisis,
-    fallbackSlug: pickRequestableGift(conversation.intimacy_stage ?? 0),
+    fallbackSlug: pickRequestableGift(stageForGift),
   });
-  const effectiveGiftSlug = giftSurface.giftSlug;
 
-  // Guarantee a VISIBLE beg at zero balance. The gift card is force-surfaced
-  // above, but Haiku often ignores the zero directive and replies normally —
-  // leaving a silent card with no begging text. When the model didn't beg
-  // (no [GIFT] marker emitted), append a short persona-matched beg line so the
-  // monetization trigger never depends on model compliance. Natural model begs
-  // (marker present) are kept untouched. Suppressed on crisis turns.
-  const baseContent = giftMarker ? giftMarker.cleanContent : aiResult.content;
+  // Anti-coffee-monotony: Haiku emits [GIFT:coffee] by reflex. If the reply
+  // doesn't actually reference a drink, re-roll the card slug within the stage
+  // pool so the ask varies (text/card stay consistent when it IS a drink).
+  const effectiveGiftSlug = normalizeGiftSlug(
+    giftSurface.giftSlug,
+    baseContent,
+    stageForGift,
+  );
+
+  // Guarantee a VISIBLE beg whenever we're nudging (low or zero). The card is
+  // surfaced above, but Haiku frequently emits the marker WITHOUT any begging
+  // text — leaving a silent card and a normal reply (the production bug). So we
+  // append a persona beg line when the visible reply lacks a beg signal, even
+  // if a marker was technically present. Natural begs (text already longs for a
+  // gift / more time) are kept untouched. Suppressed on crisis turns.
+  const replyAlreadyBegs = hasBegSignal(baseContent);
   const finalContent = ensureBegLine(baseContent, {
     nudge: balanceState.nudge,
     slug: character.slug || 'default',
     isCrisis: giftSuppressedByCrisis,
-    aiBegged: giftMarker !== null,
+    aiBegged: replyAlreadyBegs,
   });
 
   // 12. Save AI response message
