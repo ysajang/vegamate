@@ -292,23 +292,6 @@ export default function SelectPage() {
         className="vm-safe-bottom flex items-center justify-center gap-5 px-8 pb-2 pt-1"
         style={{ background: 'var(--vm-base)' }}
       >
-        {/* Skip */}
-        <button
-          onClick={() => {
-            if (currentIndex < characters.length - 1) goTo(currentIndex + 1);
-            else goTo(0);
-          }}
-          className="flex size-[52px] items-center justify-center rounded-full text-xl"
-          style={{
-            border: '1.5px solid rgba(255,255,255,0.12)',
-            background: 'rgba(255,255,255,0.05)',
-            color: 'rgba(255,255,255,0.5)',
-          }}
-          aria-label="Skip"
-        >
-          ✕
-        </button>
-
         {/* Chat CTA */}
         <button
           onClick={() => handleSelect(char.id)}
