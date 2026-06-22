@@ -154,17 +154,6 @@ export default function SelectPage() {
           transition: touchStart !== null ? 'none' : 'transform 0.3s ease',
         }}
       >
-        {/* Photo segment indicators */}
-        <div className="absolute left-4 right-4 top-3 z-10 flex gap-1">
-          {[0, 1, 2].map((i) => (
-            <div
-              key={i}
-              className="h-[3px] flex-1 rounded-full"
-              style={{ background: i === 0 ? '#FFF' : 'rgba(255,255,255,0.25)' }}
-            />
-          ))}
-        </div>
-
         {/* Settings / account entry */}
         <button
           onClick={() => router.push('/settings')}
