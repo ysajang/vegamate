@@ -1,10 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { toast } from 'sonner';
 
 type Category = 'general' | 'payment' | 'bug' | 'other';
-type FormState = 'idle' | 'submitting';
+
+const SUPPORT_EMAIL = 'support@vegamate.com';
 
 const CATEGORY_OPTIONS: { value: Category; label: string }[] = [
   { value: 'general', label: 'General' },
@@ -20,8 +20,26 @@ export interface FeedbackModalProps {
   onClose: () => void;
   /** Preselected category (e.g. 'payment' from the payment error screen). */
   defaultCategory?: Category;
-  /** Logged-in user's email, prefilled into the contact field. */
+  /** Logged-in user's email, shown so they know which address we'll see. */
   defaultEmail?: string | null;
+}
+
+/** Build a mailto: URL with the form contents prefilled into subject + body. */
+function buildMailto(category: Category, message: string, fromEmail: string): string {
+  const subject = `VegaMate feedback — ${category}`;
+  const bodyLines = [
+    message,
+    '',
+    '---',
+    fromEmail ? `From: ${fromEmail}` : '',
+  ].filter(Boolean);
+  const params = new URLSearchParams({
+    subject,
+    body: bodyLines.join('\n'),
+  });
+  // URLSearchParams encodes spaces as '+', which some mail clients keep literally.
+  const qs = params.toString().replace(/\+/g, '%20');
+  return `mailto:${SUPPORT_EMAIL}?${qs}`;
 }
 
 export function FeedbackModal({
@@ -32,17 +50,13 @@ export function FeedbackModal({
 }: FeedbackModalProps) {
   const [category, setCategory] = useState<Category>(defaultCategory);
   const [message, setMessage] = useState('');
-  const [email, setEmail] = useState(defaultEmail ?? '');
-  const [state, setState] = useState<FormState>('idle');
   const [wasOpen, setWasOpen] = useState(open);
 
   // Re-sync presets on the open transition (render-phase, no effect cascade).
   if (open && !wasOpen) {
     setWasOpen(true);
     setCategory(defaultCategory);
-    setEmail(defaultEmail ?? '');
     setMessage('');
-    setState('idle');
   } else if (!open && wasOpen) {
     setWasOpen(false);
   }
@@ -57,40 +71,13 @@ export function FeedbackModal({
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
-  const handleSubmit = useCallback(async () => {
+  const handleSend = useCallback(() => {
     const trimmed = message.trim();
-    if (!trimmed) {
-      toast.error('Please enter a message');
-      return;
-    }
-
-    setState('submitting');
-    try {
-      const res = await fetch('/api/feedback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          category,
-          message: trimmed,
-          contact_email: email.trim() || null,
-        }),
-      });
-      const data = await res.json().catch(() => null);
-
-      if (!res.ok || !data?.success) {
-        toast.error(data?.error || 'Something went wrong');
-        setState('idle');
-        return;
-      }
-
-      // Single short thank-you. No modal chain.
-      toast.success('Thanks — we got your feedback 💜');
-      onClose();
-    } catch {
-      toast.error('Network error. Please try again.');
-      setState('idle');
-    }
-  }, [category, message, email, onClose]);
+    // Opens the user's default mail app with everything prefilled.
+    // They just hit send; the mail lands in our support inbox.
+    window.location.href = buildMailto(category, trimmed, defaultEmail ?? '');
+    onClose();
+  }, [category, message, defaultEmail, onClose]);
 
   if (!open) return null;
 
@@ -164,10 +151,9 @@ export function FeedbackModal({
           <textarea
             value={message}
             onChange={(e) => setMessage(e.target.value.slice(0, MAX_LEN))}
-            disabled={state === 'submitting'}
             rows={4}
             placeholder="What happened? The more detail, the better."
-            className="w-full resize-none rounded-xl border px-3.5 py-3 text-sm outline-none transition-colors focus:ring-1 disabled:opacity-50"
+            className="w-full resize-none rounded-xl border px-3.5 py-3 text-sm outline-none transition-colors focus:ring-1"
             style={{
               borderColor: 'var(--vm-glass-border)',
               background: 'var(--vm-elevated)',
@@ -179,37 +165,27 @@ export function FeedbackModal({
           </span>
         </div>
 
-        {/* Contact email (optional) */}
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          disabled={state === 'submitting'}
-          placeholder="Email (optional — so we can reply)"
-          className="h-11 w-full rounded-xl border px-3.5 text-sm outline-none transition-colors focus:ring-1 disabled:opacity-50"
-          style={{
-            borderColor: 'var(--vm-glass-border)',
-            background: 'var(--vm-elevated)',
-            color: 'var(--vm-text-primary)',
-          }}
-        />
-
         <button
           type="button"
-          onClick={handleSubmit}
-          disabled={state === 'submitting' || !message.trim()}
+          onClick={handleSend}
+          disabled={!message.trim()}
           className="h-11 w-full rounded-xl text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-40"
           style={{ background: 'var(--vm-purple)' }}
         >
-          {state === 'submitting' ? (
-            <span className="flex items-center justify-center gap-2">
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-              Sending...
-            </span>
-          ) : (
-            'Send feedback'
-          )}
+          Send feedback
         </button>
+
+        {/* Fallback: show the address so users on clients without a mail app can copy it. */}
+        <p className="text-center text-[11px]" style={{ color: 'var(--vm-text-tertiary)' }}>
+          Or email us directly at{' '}
+          <a
+            href={`mailto:${SUPPORT_EMAIL}`}
+            className="font-medium underline underline-offset-2"
+            style={{ color: 'var(--vm-purple-soft)' }}
+          >
+            {SUPPORT_EMAIL}
+          </a>
+        </p>
       </div>
     </div>
   );
