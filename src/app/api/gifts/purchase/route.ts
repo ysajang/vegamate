@@ -237,6 +237,13 @@ async function createPayPalGiftOrder({
           paypal: {
             experienceContext: {
               brandName: 'VegaMate',
+              // locale must be set explicitly. Without it PayPal derives the
+              // checkout locale/country from the *seller* account (KR), so the
+              // hosted card form defaulted to "대한민국"/+82 even for non-KR
+              // buyers — which then tripped PayPal's "KR-to-KR transfers not
+              // allowed" block. en-US makes the country selector default to a
+              // neutral non-KR locale so overseas buyers can actually pay.
+              locale: 'en-US',
               landingPage: PaypalExperienceLandingPage.GuestCheckout,
               paymentMethodPreference: PayeePaymentMethodPreference.ImmediatePaymentRequired,
               userAction: PaypalExperienceUserAction.PayNow,

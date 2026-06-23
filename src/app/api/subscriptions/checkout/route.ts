@@ -173,6 +173,9 @@ async function createPayPalSubscription({
         customId: sub.id,
         applicationContext: {
           brandName: 'VegaMate',
+          // See gifts/purchase: explicit locale prevents PayPal from defaulting
+          // the checkout to the seller's KR locale, which blocked overseas buyers.
+          locale: 'en-US',
           userAction: 'SUBSCRIBE_NOW' as never,
           returnUrl: `${APP_CONFIG.url}/payment/return?type=subscription&sub=${sub.id}`,
           cancelUrl: `${APP_CONFIG.url}/payment/return?type=subscription&sub=${sub.id}&cancelled=true`,
