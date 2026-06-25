@@ -279,6 +279,34 @@ export async function GET(req: NextRequest) {
           continue;
         }
 
+        // 4c-2. Free + zero-heart users get a TIGHTER daily cap.
+        // Proactive sends are free LLM calls paid by us. A user who has run out
+        // of hearts and has NO active subscription is the least likely to convert
+        // per extra send, yet would otherwise receive up to MAX_DAILY_SENDS/day.
+        // We still allow ONE send/day (the "come back" re-engagement hook) but no
+        // more — this caps wasted spend on non-paying, exhausted users while
+        // preserving the retention channel. Subscribers and users who still hold
+        // hearts keep the full MAX_DAILY_SENDS allowance.
+        const FREE_EXHAUSTED_DAILY_CAP = 1;
+        if ((dailyCount ?? 0) >= FREE_EXHAUSTED_DAILY_CAP) {
+          const [{ data: activeSub }, { data: heartRow }] = await Promise.all([
+            serviceClient.rpc('get_active_subscription', { p_user_id: userId }),
+            serviceClient
+              .from('user_hearts')
+              .select('balance')
+              .eq('user_id', userId)
+              .maybeSingle(),
+          ]);
+
+          const isSubscriber = activeSub?.active === true;
+          const heartBalance = heartRow?.balance ?? 0;
+
+          if (!isSubscriber && heartBalance <= 0) {
+            skipped++;
+            continue;
+          }
+        }
+
         // 4d. Consecutive send check (no 2+ sends without user response)
         const { data: recentLogs } = await serviceClient
           .from('proactive_message_log')
