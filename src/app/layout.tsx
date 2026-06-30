@@ -21,8 +21,8 @@ export const metadata: Metadata = {
     default: 'VegaMate - AI Companion',
     template: '%s | VegaMate',
   },
-  description: 'Chat with AI companions who send you selfies on their own. Not on demand — they surprise you. Collect rare expressions and outfits.',
-  keywords: ['AI companion', 'AI boyfriend', 'AI girlfriend', 'selfie', 'anime companion', 'virtual girlfriend'],
+  description: 'Chat with AI characters who message you on their own and send photos as you get to know them. They remember you. Collect rare moments.',
+  keywords: ['AI companion', 'AI chat', 'anime characters', 'AI characters', 'chat app', 'companion app'],
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
@@ -32,22 +32,22 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     siteName: 'VegaMate',
-    title: 'VegaMate — Your AI Companion Sends You Selfies',
-    description: 'They send you selfies on their own — not because you asked. Chat and collect rare moments.',
+    title: 'VegaMate — AI Characters Who Remember You',
+    description: 'They message you first and send photos as you get to know them. Chat and collect rare moments.',
     url: 'https://vegamate.com',
     images: [
       {
         url: 'https://vegamate.com/og-image.jpg',
         width: 1200,
         height: 630,
-        alt: 'VegaMate - AI companions who send you selfies',
+        alt: 'VegaMate - AI characters who chat and send photos',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Your AI companion sends you selfies 📸',
-    description: 'They send photos on their own — not because you asked. Chat and collect rare moments.',
+    title: 'AI characters who remember you',
+    description: 'They message you first and send photos as you get to know them. Chat and collect rare moments.',
     images: ['https://vegamate.com/og-image.jpg'],
   },
   robots: {

@@ -2,17 +2,17 @@ const FEATURES = [
   {
     emoji: '💬',
     title: 'Real Conversations',
-    desc: 'AI companions with personality, memory, and real chemistry',
+    desc: 'AI characters with personality, memory, and a real spark',
   },
   {
     emoji: '📸',
     title: 'Surprise Drops',
-    desc: 'Keep chatting and they surprise you with exclusive photos',
+    desc: 'Keep chatting and they surprise you with new photos',
   },
   {
     emoji: '👫',
     title: 'Male & Female',
-    desc: 'Choose your type — boyfriends and girlfriends',
+    desc: 'Choose the characters you connect with',
   },
   {
     emoji: '📱',
