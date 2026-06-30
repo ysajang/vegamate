@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from 'next';
+import { Suspense } from 'react';
 import { Geist, Geist_Mono } from 'next/font/google';
 import { Toaster } from '@/components/ui/sonner';
 import { Analytics } from '@vercel/analytics/next';
+import { PixelProvider } from '@/components/analytics/pixel-provider';
 import './globals.css';
 
 const geistSans = Geist({
@@ -73,6 +75,9 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} min-h-dvh bg-background font-sans text-foreground antialiased`}
       >
         {children}
+        <Suspense fallback={null}>
+          <PixelProvider />
+        </Suspense>
         <Toaster position="top-center" richColors closeButton />
         <Analytics />
       </body>

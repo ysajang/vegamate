@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
 import { CharacterAvatar, TypingIndicator } from '@/components/common';
+import { trackEvent } from '@/lib/analytics/meta-pixel';
 import type { DbCharacter } from '@/types';
 import {
   resolveInitialOnboardingStep,
@@ -669,6 +670,8 @@ export default function OnboardingPage() {
       const json = await res.json();
 
       if (json.success) {
+        // Funnel: signup complete (onboarding finished → first chat).
+        trackEvent('CompleteRegistration');
         router.push(`/chat/${json.data.conversation.id}`);
         return;
       }

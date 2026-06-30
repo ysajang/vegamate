@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { AgeVerifyInline } from './age-verify-inline';
 import { resolvePurchaseOutcome } from './purchase-outcome';
+import { trackEvent } from '@/lib/analytics/meta-pixel';
 
 interface GiftItem {
   id: string;
@@ -74,6 +75,10 @@ export function GiftSheet({
 
       switch (outcome.kind) {
         case 'redirect': {
+          // Funnel: payment intent — user tapped a gift and we're sending them
+          // to PayPal. Fired before the popup so ad blockers on the new tab
+          // can't suppress it.
+          trackEvent('InitiateCheckout', { content_name: slug });
           const win = window.open(outcome.url, '_blank');
           if (!win) {
             setNotice('Please allow popups to complete your gift, then try again.');

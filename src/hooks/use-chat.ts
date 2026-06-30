@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import type { DbMessage } from '@/types';
 import { shouldGateInput } from './exhaustion-gate';
 import { StreamDecoder, type StreamEvent } from '@/lib/chat/stream-protocol';
+import { trackEvent } from '@/lib/analytics/meta-pixel';
 
 /** Terminal `meta` payload from the chat stream (mirrors the old JSON body). */
 interface ChatMetaPayload {
@@ -346,6 +347,17 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
           streamedText += text;
           if (!streamingStarted) {
             streamingStarted = true;
+            // Funnel: activation — user actually started chatting. Fire once
+            // per browser session (first AI reply received). sessionStorage
+            // guard avoids re-firing on every later message.
+            try {
+              if (!sessionStorage.getItem('vm_lead_fired')) {
+                sessionStorage.setItem('vm_lead_fired', '1');
+                trackEvent('Lead');
+              }
+            } catch {
+              // sessionStorage may be unavailable (private mode) — ignore.
+            }
             // Insert the streaming bubble once the first token arrives.
             const placeholder: DbMessage = {
               id: streamingId,
