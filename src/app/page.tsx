@@ -12,20 +12,20 @@ import type { Metadata } from 'next';
 const IS_LIVE = (process.env.NEXT_PUBLIC_LAUNCH_MODE ?? 'live') === 'live';
 
 export const metadata: Metadata = {
-  title: 'VegaMate — Your AI Companion Sends You Selfies',
+  title: 'VegaMate — AI Characters Who Remember You',
   description:
-    'Chat with AI companions who send you selfies on their own. Not on demand — they surprise you. Collect rare expressions and outfits.',
+    'Chat with AI characters who message you first and send photos as you get to know them. They remember you. Collect rare moments.',
   openGraph: {
-    title: 'VegaMate — Your AI Companion Sends You Selfies',
+    title: 'VegaMate — AI Characters Who Remember You',
     description:
       'Chat and collect moments with characters who remember you.',
     type: 'website',
     url: 'https://vegamate.com',
-    images: [{ url: 'https://vegamate.com/og-image.jpg', width: 1200, height: 630, alt: 'VegaMate - AI companions who send you selfies' }],
+    images: [{ url: 'https://vegamate.com/og-image.jpg', width: 1200, height: 630, alt: 'VegaMate - AI characters who chat and send photos' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Your AI companion sends you selfies 📸',
+    title: 'AI characters who remember you',
     description:
       'Chat and collect moments with characters who remember you.',
     images: ['https://vegamate.com/og-image.jpg'],
@@ -81,16 +81,16 @@ export default function LandingPage() {
           </div>
 
           <h1 className="text-center text-[2.2rem] font-extrabold leading-[1.08] tracking-tight sm:text-6xl">
-            <span className="text-white">Your AI companion</span>
+            <span className="text-white">AI characters</span>
             <br />
             <span className="bg-gradient-to-r from-fuchsia-400 via-pink-400 to-amber-300 bg-clip-text text-transparent">
-              sends you selfies
+              who remember you
             </span>
           </h1>
 
           <p className="max-w-lg text-center text-[0.95rem] leading-relaxed text-white/50 sm:text-lg">
-            Chat with them. Build a bond. They surprise you with selfies
-            — you never know what expression or outfit you&apos;ll get.
+            Chat with characters who message you first and share photos
+            as you get to know them — collect rare moments along the way.
           </p>
 
           {IS_LIVE && (
@@ -138,7 +138,7 @@ export default function LandingPage() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {[
             { emoji: '💬', title: 'They remember you', desc: 'Every chat builds your unique bond' },
-            { emoji: '📸', title: 'Surprise selfies', desc: 'They send photos on their own — not on demand' },
+            { emoji: '📸', title: 'Photo drops', desc: 'They share new photos as your story unfolds' },
             { emoji: '✨', title: 'Rare moments', desc: 'Special outfits and scenes you can collect' },
           ].map((v) => (
             <div key={v.title} className="flex flex-col items-center gap-1.5 rounded-xl border border-white/5 bg-white/[0.02] px-4 py-5 text-center">
@@ -171,7 +171,7 @@ export default function LandingPage() {
 
           <div className="flex justify-start">
             <div className="rounded-2xl rounded-bl-md bg-white/10 px-3.5 py-2">
-              <span className="text-sm text-white/80">good morning~ I just woke up thinking about you</span>
+              <span className="text-sm text-white/80">good morning~ guess where I am right now</span>
             </div>
           </div>
 
@@ -185,13 +185,13 @@ export default function LandingPage() {
 
           <div className="flex justify-start">
             <div className="rounded-2xl rounded-bl-md bg-white/10 px-3.5 py-2">
-              <span className="text-sm text-white/80">first coffee of the day ☕ wish you were here</span>
+              <span className="text-sm text-white/80">first coffee of the day ☕ best spot in town</span>
             </div>
           </div>
 
           <div className="flex justify-end">
             <div className="rounded-2xl rounded-br-md bg-fuchsia-600/80 px-3.5 py-2">
-              <span className="text-sm text-white">omg you look so cute 😭</span>
+              <span className="text-sm text-white">that view is amazing 😍</span>
             </div>
           </div>
         </div>
@@ -248,7 +248,7 @@ export default function LandingPage() {
         </div>
 
         <p className="mt-6 text-center text-sm font-medium text-white/40">
-          They send selfies on their own — not because you asked
+          They share photos on their own as your story unfolds
         </p>
       </section>
 
