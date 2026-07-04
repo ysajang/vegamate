@@ -67,3 +67,42 @@ describe('hasBegSignal', () => {
     expect(hasBegSignal('')).toBe(false);
   });
 });
+
+describe('text-first gift inference (card must match what the character SAID)', () => {
+  // Production bug: reply said "커피 땡기는데" but the card showed Milk Tea.
+  // The visible text is ground truth for the user — the card must follow it.
+  it('overrides a mismatched non-coffee slug when the text clearly asks for coffee', () => {
+    const out = normalizeGiftSlug('milktea', '아 근데 나 오늘따라 커피 땡기는데~ 한 잔 사주면 안 돼?', 0, () => 0);
+    expect(out).toBe('coffee');
+  });
+
+  it('overrides a coffee slug when the text clearly asks for milk tea', () => {
+    const out = normalizeGiftSlug('coffee', '밀크티 마시고 싶다아', 0, () => 0);
+    expect(out).toBe('milktea');
+  });
+
+  it('overrides a random fallback slug when the text mentions cake', () => {
+    const out = normalizeGiftSlug('book', '달달한 케이크 먹고 싶은 기분이야', 0, () => 0);
+    expect(out).toBe('cake');
+  });
+
+  it('respects the model slug when the text mentions multiple gifts (ambiguous)', () => {
+    const out = normalizeGiftSlug('cake', '커피랑 케이크 둘 다 좋지', 0, () => 0);
+    expect(out).toBe('cake');
+  });
+
+  it('respects the model slug when the text mentions no specific gift', () => {
+    const out = normalizeGiftSlug('flowers', '오늘 날씨 좋다', 2, () => 0);
+    expect(out).toBe('flowers');
+  });
+
+  it('infers from English text too', () => {
+    const out = normalizeGiftSlug('coffee', 'omg I really want some bubble tea right now', 0, () => 0);
+    expect(out).toBe('milktea');
+  });
+
+  it('does not false-positive book from 책상', () => {
+    const out = normalizeGiftSlug('flowers', '책상 정리했어!', 2, () => 0);
+    expect(out).toBe('flowers');
+  });
+});

@@ -37,6 +37,43 @@ function bodyHas(text: string, cues: string[]): boolean {
 }
 
 /**
+ * Slug-specific keywords for text-first inference (KO + EN). Deliberately
+ * SPECIFIC tokens only — generic drink words ('음료', '마실') stay out so
+ * two slugs can't both match on vague phrasing.
+ */
+const GIFT_TEXT_CUES: Record<RequestableGiftSlug, string[]> = {
+  coffee: ['커피', '아메리카노', '에스프레소', '라떼', '라테', 'coffee', 'americano', 'latte', 'espresso'],
+  milktea: ['밀크티', '버블티', '타피오카', 'milk tea', 'milktea', 'bubble tea', 'boba'],
+  cake: ['케이크', '케익', 'cake'],
+  book: ['책', '소설', 'book', 'novel'],
+  movie: ['영화', 'movie', 'cinema'],
+  flowers: ['꽃', 'flower'],
+  plushie: ['인형', 'plushie', 'plush', 'teddy'],
+  clothes: ['옷', '원피스', '후드', 'clothes', 'hoodie', 'dress'],
+  airpods: ['에어팟', '이어폰', 'airpods', 'earbuds', 'headphone'],
+  dinner: ['디너', '저녁 식사', '저녁식사', 'dinner'],
+};
+
+/** Common false-positive sources stripped before inference matching. */
+const INFERENCE_NOISE = ['책상', '책임', '꽃무늬'];
+
+/**
+ * Infer which gift the reply text is actually talking about.
+ * Returns a slug only when EXACTLY ONE distinct gift matches — ambiguous
+ * (0 or 2+) returns null so the model/marker choice is respected.
+ */
+export function inferGiftFromText(replyBody: string): RequestableGiftSlug | null {
+  if (!replyBody) return null;
+  let t = replyBody.toLowerCase();
+  for (const noise of INFERENCE_NOISE) t = t.split(noise).join(' ');
+
+  const matches = (Object.keys(GIFT_TEXT_CUES) as RequestableGiftSlug[]).filter((slug) =>
+    GIFT_TEXT_CUES[slug].some((cue) => t.includes(cue.toLowerCase())),
+  );
+  return matches.length === 1 ? matches[0] : null;
+}
+
+/**
  * Normalize the model's gift slug for the card.
  *
  * @param modelSlug slug parsed from the model marker, or null
@@ -55,6 +92,13 @@ export function normalizeGiftSlug(
   pick: (len: number) => number = (len) => Math.floor(Math.random() * len),
 ): string | null {
   if (!modelSlug) return null;
+
+  // Text-first: the user READS the reply — if it clearly names one gift, the
+  // card must match it, regardless of what the marker/fallback picked.
+  // (Production bug: reply said "커피 땡기는데", card showed Milk Tea.)
+  const inferred = inferGiftFromText(replyBody);
+  if (inferred && inferred !== modelSlug) return inferred;
+
   if (modelSlug !== 'coffee') return modelSlug;
   // Coffee with a real drink reference -> keep (consistent with the text).
   if (bodyHas(replyBody, DRINK_CUES)) return 'coffee';
