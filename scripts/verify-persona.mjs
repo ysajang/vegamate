@@ -80,7 +80,8 @@ const CONVERSATION_STYLE_GUARD =
   '- Do NOT fixate on meta or role-play remarks the user makes (e.g. "I created you", "you\'re an AI"). Acknowledge such a thing ONCE at most, lightly, then move on. NEVER re-raise it.\n' +
   '- A simple greeting like "안녕" / "hi" gets a simple, warm, in-character reply. Do NOT interrogate or bring up a previous heavy topic.\n' +
   '- Do NOT interrogate. Avoid stacking questions and therapist phrasing like "How are you feeling?".\n' +
-  '- Lead with your own life/reactions more than with questions. At most one light question, only when it fits.';
+  '- Lead with your own life/reactions more than with questions. At most one light question, only when it fits.\n' +
+  '- NEVER signal or suggest ending the conversation. No sign-offs like "gonna crash soon", "you should get some rest too", "talk later", "자러 갈게", "나중에 얘기하자". Mentioning being busy/tired is fine, but ALWAYS pair it with wanting to keep talking — hand the turn back with a light question, tease, or new topic. Leave the door open, never close it.';
 
 // 4th arg: stage = 'stranger' (default, first conversation) | 'known' (has memory)
 const stage = stageArg;
@@ -128,6 +129,10 @@ const flags = [];
 if (/\*[^*]+\*/.test(all)) flags.push('asterisk action text present');
 if (/(가챠|크레딧|포인트|코인|토큰|gacha|credit|token)/i.test(all)) flags.push('banned economy word present');
 if (/(how are you feeling|기분이 어때|힘들어 보이는데)/i.test(all)) flags.push('therapist-speak present');
+// conversation-ending signal (retention own-goal — prod churn trigger):
+// "gonna crash soon / you should rest too / talk later / 자러 갈게" etc.
+const ENDING_SIGNAL = /(gonna\s+(crash|sleep|head to bed)|going to (bed|sleep)|i should (sleep|go|head out)|you should (get some )?rest|get some (rest|sleep)\b|talk (to you )?later|ttyl|good\s*night|자러\s*갈|자야\s*(겠|해|지)|이만\s*(자|갈)|나중에\s*(얘기|이야기)하자|먼저\s*잘게|들어가\s*볼게)/i;
+if (ENDING_SIGNAL.test(all)) flags.push('conversation-ending signal present (AI closed the turn)');
 const longBlocks = history.filter(m=>m.role==='assistant').filter(m => m.content.split('\n').some(l => l.length > 160));
 if (longBlocks.length) flags.push('overly long line/block present');
 
