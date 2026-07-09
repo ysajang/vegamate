@@ -50,6 +50,7 @@ export function FeedbackModal({
 }: FeedbackModalProps) {
   const [category, setCategory] = useState<Category>(defaultCategory);
   const [message, setMessage] = useState('');
+  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [wasOpen, setWasOpen] = useState(open);
 
   // Re-sync presets on the open transition (render-phase, no effect cascade).
@@ -57,6 +58,7 @@ export function FeedbackModal({
     setWasOpen(true);
     setCategory(defaultCategory);
     setMessage('');
+    setStatus('idle');
   } else if (!open && wasOpen) {
     setWasOpen(false);
   }
@@ -71,13 +73,32 @@ export function FeedbackModal({
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
-  const handleSend = useCallback(() => {
+  // In-app submit. The old mailto: flow silently failed for PWA users without
+  // a configured mail client (the common case on mobile installs); mailto is
+  // kept only as the on-error fallback below.
+  const handleSend = useCallback(async () => {
     const trimmed = message.trim();
-    // Opens the user's default mail app with everything prefilled.
-    // They just hit send; the mail lands in our support inbox.
-    window.location.href = buildMailto(category, trimmed, defaultEmail ?? '');
-    onClose();
-  }, [category, message, defaultEmail, onClose]);
+    if (!trimmed || status === 'sending') return;
+    setStatus('sending');
+    try {
+      const res = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          category,
+          message: trimmed,
+          context: {
+            path: typeof window !== 'undefined' ? window.location.pathname : null,
+          },
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setStatus('sent');
+      setTimeout(onClose, 1200);
+    } catch {
+      setStatus('error');
+    }
+  }, [category, message, status, onClose]);
 
   if (!open) return null;
 
@@ -168,24 +189,29 @@ export function FeedbackModal({
         <button
           type="button"
           onClick={handleSend}
-          disabled={!message.trim()}
+          disabled={!message.trim() || status === 'sending' || status === 'sent'}
           className="h-11 w-full rounded-xl text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-40"
-          style={{ background: 'var(--vm-purple)' }}
+          style={{ background: status === 'sent' ? 'var(--vm-success, #22c55e)' : 'var(--vm-purple)' }}
         >
-          Send feedback
+          {status === 'sending' ? 'Sending…' : status === 'sent' ? 'Sent — thank you! 💜' : 'Send feedback'}
         </button>
 
-        {/* Fallback: show the address so users on clients without a mail app can copy it. */}
-        <p className="text-center text-[11px]" style={{ color: 'var(--vm-text-tertiary)' }}>
-          Or email us directly at{' '}
-          <a
-            href={`mailto:${SUPPORT_EMAIL}`}
-            className="font-medium underline underline-offset-2"
-            style={{ color: 'var(--vm-purple-soft)' }}
-          >
-            {SUPPORT_EMAIL}
-          </a>
-        </p>
+        {status === 'error' ? (
+          <p className="text-center text-[11px]" style={{ color: 'var(--vm-text-tertiary)' }}>
+            Couldn&apos;t send right now — please try again, or email us at{' '}
+            <a
+              href={buildMailto(category, message.trim(), defaultEmail ?? '')}
+              className="font-medium underline underline-offset-2"
+              style={{ color: 'var(--vm-purple-soft)' }}
+            >
+              {SUPPORT_EMAIL}
+            </a>
+          </p>
+        ) : (
+          <p className="text-center text-[11px]" style={{ color: 'var(--vm-text-tertiary)' }}>
+            Goes straight to the team. We read every message.
+          </p>
+        )}
       </div>
     </div>
   );

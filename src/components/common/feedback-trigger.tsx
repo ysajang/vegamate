@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { MessageSquarePlus } from 'lucide-react';
 import { FeedbackModal } from './feedback-modal';
 
 type Category = 'general' | 'payment' | 'bug' | 'other';
@@ -9,8 +10,8 @@ interface FeedbackTriggerProps {
   /** Logged-in user's email to prefill. */
   defaultEmail?: string | null;
   defaultCategory?: Category;
-  /** Visual style: settings row vs inline link. */
-  variant?: 'row' | 'link';
+  /** Visual style: settings row, inline link, or compact header icon. */
+  variant?: 'row' | 'link' | 'icon';
   label?: string;
 }
 
@@ -24,7 +25,18 @@ export function FeedbackTrigger({
 
   return (
     <>
-      {variant === 'row' ? (
+      {variant === 'icon' ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="flex size-9 items-center justify-center rounded-xl transition-colors"
+          style={{ color: 'var(--vm-text-secondary)' }}
+          aria-label="Send feedback"
+          title="Send feedback"
+        >
+          <MessageSquarePlus className="size-[18px]" />
+        </button>
+      ) : variant === 'row' ? (
         <button
           type="button"
           onClick={() => setOpen(true)}

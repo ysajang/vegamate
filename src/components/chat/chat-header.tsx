@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
-import { CharacterAvatar } from '@/components/common';
+import { CharacterAvatar, FeedbackTrigger } from '@/components/common';
 
 interface ChatHeaderProps {
   characterName: string;
@@ -67,6 +67,9 @@ export function ChatHeader({
           </p>
         </div>
       </button>
+
+      {/* In-app feedback — the ad-funnel users live here, not in settings */}
+      <FeedbackTrigger variant="icon" />
     </header>
   );
 }
