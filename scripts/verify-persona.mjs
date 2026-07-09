@@ -64,11 +64,16 @@ console.log(`[greeting] ${char.greeting_message}\n`);
 // language directive (prepended) + persona, plus the conversation-style guard
 // that lives in the dynamic block in prod. We omit gift/selfie/crisis appends
 // (those only add guardrails and aren't relevant to persona/lang checks).
-const LANGUAGE_DIRECTIVE =
-  '[LANGUAGE — HIGHEST PRIORITY, OVERRIDES EVERYTHING BELOW]\n' +
-  'Detect the language of the user\'s LATEST message and reply ONLY in that exact language. ' +
-  'This applies even to very short messages (e.g. "hey", "hi", "ok", "lol") and even when earlier messages used a different language — always follow the most recent user message. ' +
-  'Never mix languages in one reply. The examples written in Korean inside your persona are style references only; they do NOT mean you should answer in Korean when the user writes in another language.';
+// mirrors src/lib/chat/language-directive.ts buildLanguageDirective(lang)
+const LANGUAGE_DIRECTIVE = lang === 'ko'
+  ? '[LANGUAGE — HIGHEST PRIORITY, OVERRIDES EVERYTHING BELOW]\n' +
+    'Respond ONLY in Korean (한국어). Natural Korean texting style — including ㅋㅋ/ㅎㅎ/ㅠㅠ and casual 반말 as your persona defines — is expected. ' +
+    'Do not switch to another language unless the user clearly does first.'
+  : '[LANGUAGE — HIGHEST PRIORITY, OVERRIDES EVERYTHING BELOW]\n' +
+    'Respond ONLY in English. Every single reply must be written entirely in English.\n' +
+    'Never mix Korean words, Korean sentences, or Korean internet slang (ㅋㅋ / ㅎㅎ / ㅠㅠ / ㄹㅇ / ㅇㅈ) into your reply — not even one. ' +
+    'Korean texting habits must be translated into the English equivalent instead (e.g. ㅋㅋ → "lol"/"haha", ㅠㅠ → a sad tone or emoji appropriate in English).\n' +
+    'The Korean example lines inside your persona are STYLE references only — re-express that same vibe, energy, and personality in English. Copying their Korean text into a reply is a bug.';
 
 const CONVERSATION_STYLE_GUARD =
   '\n\n[CONVERSATION STYLE — IMPORTANT]\n' +
@@ -127,14 +132,16 @@ const longBlocks = history.filter(m=>m.role==='assistant').filter(m => m.content
 if (longBlocks.length) flags.push('overly long line/block present');
 
 // language-match check: for each user turn detected as English (ASCII-only,
-// no Hangul), the matching assistant reply must not contain Hangul.
+// no Hangul), the matching assistant reply must not contain any Korean —
+// Hangul syllables OR slang jamo (ㅋ/ㅎ/ㅠ etc.), the exact prod leak.
 const HANGUL = /[\uAC00-\uD7A3]/;
+const KOREAN_LEAK = /[\uAC00-\uD7A3\u3131-\u3163]/; // syllables + compat jamo
 for (let i = 0; i < history.length; i += 2) {
   const u = history[i]?.content ?? '';
   const a = history[i + 1]?.content ?? '';
   const userIsEnglish = !HANGUL.test(u) && /[a-z]/i.test(u);
-  if (userIsEnglish && HANGUL.test(a)) {
-    flags.push(`language mismatch: English input "${u}" got Korean reply`);
+  if (userIsEnglish && KOREAN_LEAK.test(a)) {
+    flags.push(`language mismatch: English input "${u}" got Korean-containing reply`);
   }
 }
 

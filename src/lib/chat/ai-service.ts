@@ -6,6 +6,7 @@ import { getAnthropicClient, withRetry } from './anthropic-client';
 import { parseSelfieMarker } from './selfie-context';
 import { buildGiftNudgeDirective } from './gift-nudge';
 import { giftPoolForStage } from './gift-picker';
+import { buildLanguageDirective } from './language-directive';
 
 interface GenerateResponseParams {
   character: DbCharacter;
@@ -46,6 +47,16 @@ interface GenerateResponseParams {
    * unlock premium asks ("우리 사이에..."). Defaults to 0 when unknown.
    */
   intimacyStage?: number;
+  /**
+   * Server-resolved response language (ISO 639-1), computed by the route via
+   * resolveResponseLanguage (section-19 priority: actual user conversation
+   * language → profile preferred_language → 'en'). When set, the language
+   * directive becomes an explicit "Respond ONLY in {language}" rule (with a
+   * hard ban on Korean sentences/slang for non-ko targets) instead of asking
+   * the model to detect the language itself — the model-side detection is what
+   * leaked Korean to English users in prod.
+   */
+  responseLanguage?: string;
 }
 
 interface GenerateResponseResult {
@@ -243,7 +254,7 @@ interface PromptPayload {
  * context, and prompt caching.
  */
 function buildPromptPayload(params: GenerateResponseParams): PromptPayload {
-  const { character, history, userMessage, selfieAllowed, availableScenes, memoryContext, messageCount, heartsRemaining, giftNudge, intimacyStage } = params;
+  const { character, history, userMessage, selfieAllowed, availableScenes, memoryContext, messageCount, heartsRemaining, giftNudge, intimacyStage, responseLanguage } = params;
 
   // Crisis detection (keyword-based first pass — model provides second pass).
   // Pass recent user messages so a dangerous follow-up right after a strong
@@ -262,11 +273,11 @@ function buildPromptPayload(params: GenerateResponseParams): PromptPayload {
   // is written largely in Korean; without a top-level override, short inputs
   // like "hey" get pulled into Korean replies. This must win over the persona's
   // own (weaker, mid-body) language note for every character.
-  const LANGUAGE_DIRECTIVE =
-    '[LANGUAGE — HIGHEST PRIORITY, OVERRIDES EVERYTHING BELOW]\n' +
-    'Detect the language of the user\'s LATEST message and reply ONLY in that exact language. ' +
-    'This applies even to very short messages (e.g. "hey", "hi", "ok", "lol") and even when earlier messages used a different language — always follow the most recent user message. ' +
-    'Never mix languages in one reply. The examples written in Korean inside your persona are style references only; they do NOT mean you should answer in Korean when the user writes in another language.';
+  //
+  // When the route resolved a language (responseLanguage), the directive is an
+  // explicit "ONLY in {language}" rule; the block stays cacheable per
+  // character×language, which is the practical case (users rarely switch).
+  const LANGUAGE_DIRECTIVE = buildLanguageDirective(responseLanguage ?? null);
 
   const staticSystemPrompt =
     LANGUAGE_DIRECTIVE + '\n\n' + character.persona_prompt + '\n' + SAFETY_SYSTEM_PROMPT;

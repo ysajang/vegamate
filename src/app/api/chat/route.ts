@@ -8,6 +8,7 @@ import { assertAgeVerified } from '@/lib/auth/age-guard';
 import { evaluateSelfieGuard } from '@/lib/chat/selfie-trigger';
 import { getCharacterScenes } from '@/lib/chat/selfie-context';
 import { generateAIResponseStream } from '@/lib/chat/ai-service';
+import { resolveResponseLanguage } from '@/lib/chat/language-directive';
 import { encodeStreamEvent, type StreamEvent } from '@/lib/chat/stream-protocol';
 import {
   fetchUserMemories,
@@ -106,7 +107,7 @@ async function handler(req: NextRequest) {
   // Active subscribers are promised unlimited conversation — they must never
   // consume hearts nor hit the gift gate. consume_heart is therefore gated on
   // the subscription result and run right after the parallel batch resolves.
-  const [subCheck, userMsgRes, , historyRes, memoryRes] = await Promise.all([
+  const [subCheck, userMsgRes, , historyRes, memoryRes, profileRes] = await Promise.all([
     serviceClient.rpc('get_active_subscription', { p_user_id: user.id }),
     serviceClient
       .from('messages')
@@ -134,6 +135,12 @@ async function handler(req: NextRequest) {
       console.warn('[Chat] Memory fetch failed (continuing without):', err);
       return [] as import('@/types').MemoryRow[];
     }),
+    // Language enforcement input (best-effort — resolver falls back to 'en').
+    serviceClient
+      .from('profiles')
+      .select('preferred_language')
+      .eq('id', user.id)
+      .single(),
   ]);
 
   const isSubscriber = Boolean(subCheck.data?.active);
@@ -190,6 +197,17 @@ async function handler(req: NextRequest) {
   // ascending+limit would have pinned the AI to the OLDEST 30 messages once a
   // conversation grew past 30 turns, causing context loss / topic fixation.)
   const history = ((historyRes.data || []) as DbMessage[]).slice().reverse();
+
+  // Response language, resolved SERVER-SIDE (section-19 priority: actual user
+  // conversation language → profile preferred_language → 'en'). Injected as an
+  // explicit "ONLY in {language}" rule so English users never get Korean
+  // sentences/ㅋㅋ leaks (prod bug, meta ads round 1). A user who writes in
+  // Korean still resolves to ko — Korean replies to Korean users are correct.
+  const responseLanguage = resolveResponseLanguage(
+    history,
+    content,
+    profileRes.data?.preferred_language ?? null
+  );
 
   // 7.5. User memories for prompt context — from the parallel batch
   // (best-effort: a fetch failure already resolved to []).
@@ -256,6 +274,7 @@ async function handler(req: NextRequest) {
             heartsRemaining,
             giftNudge: balanceState.nudge,
             intimacyStage: conversation.intimacy_stage ?? 0,
+            responseLanguage,
           },
           (text) => send({ t: 'delta', v: text })
         );
