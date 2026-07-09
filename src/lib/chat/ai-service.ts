@@ -7,6 +7,7 @@ import { parseSelfieMarker } from './selfie-context';
 import { buildGiftNudgeDirective } from './gift-nudge';
 import { giftPoolForStage } from './gift-picker';
 import { buildLanguageDirective } from './language-directive';
+import { resolveSelfieDecision } from './selfie-promise';
 
 interface GenerateResponseParams {
   character: DbCharacter;
@@ -101,7 +102,11 @@ export async function generateAIResponse(
     (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0);
 
   return {
-    ...finalizeResponse(responseContent, actualSelfieAllowed),
+    ...finalizeResponse(responseContent, {
+      selfieAllowed: actualSelfieAllowed,
+      isCrisis: crisisSeverity !== 'none',
+      availableScenes: params.availableScenes ?? [],
+    }),
     tokensUsed,
     responseTimeMs: Date.now() - startTime,
     crisisSeverity,
@@ -185,7 +190,11 @@ export async function generateAIResponseStream(
     (message.usage?.input_tokens || 0) + (message.usage?.output_tokens || 0);
 
   return {
-    ...finalizeResponse(full, actualSelfieAllowed),
+    ...finalizeResponse(full, {
+      selfieAllowed: actualSelfieAllowed,
+      isCrisis: crisisSeverity !== 'none',
+      availableScenes: params.availableScenes ?? [],
+    }),
     tokensUsed,
     responseTimeMs: Date.now() - startTime,
     crisisSeverity,
@@ -211,33 +220,38 @@ function findMarkerOpener(text: string): number {
 /**
  * Shared post-processing: strip selfie/gift markers and derive selfie fields.
  * Used by both the buffered and streaming paths so behavior is identical.
+ *
+ * Promise ↔ delivery consistency (P0): the send decision no longer trusts the
+ * model's marker discipline alone. resolveSelfieDecision (pure, tested) also
+ * honors a VISIBLE selfie promise in the text with no marker (auto-assigning
+ * a contextual scene), lets an explicit promise win over the frequency guard,
+ * and keeps crisis/refusal turns photo-free. See selfie-promise.ts.
  */
 function finalizeResponse(
   responseContent: string,
-  actualSelfieAllowed: boolean
+  opts: { selfieAllowed: boolean; isCrisis: boolean; availableScenes: string[] }
 ): Pick<
   GenerateResponseResult,
   'content' | 'selfieCaption' | 'selfieScene' | 'sendSelfie'
 > {
-  let content = responseContent;
-  let selfieCaption: string | null = null;
-  let selfieScene: string | null = null;
-  let sendSelfie = false;
-
   const marker = parseSelfieMarker(responseContent);
-  if (actualSelfieAllowed) {
-    if (marker) {
-      sendSelfie = true;
-      selfieScene = marker.scene;
-      content = marker.cleanContent;
-      selfieCaption = content || null;
-    }
-  } else if (marker) {
-    // Safety: strip any stray marker the model emitted while forbidden.
-    content = marker.cleanContent;
-  }
+  const content = marker ? marker.cleanContent : responseContent;
 
-  return { content, selfieCaption, selfieScene, sendSelfie };
+  const decision = resolveSelfieDecision({
+    cleanContent: content,
+    hasMarker: Boolean(marker),
+    markerScene: marker?.scene ?? null,
+    selfieAllowed: opts.selfieAllowed,
+    isCrisis: opts.isCrisis,
+    availableScenes: opts.availableScenes,
+  });
+
+  return {
+    content,
+    selfieCaption: decision.sendSelfie ? content || null : null,
+    selfieScene: decision.scene,
+    sendSelfie: decision.sendSelfie,
+  };
 }
 
 interface PromptPayload {
@@ -388,12 +402,13 @@ HOW to send: write your normal reply, and if a photo fits, end your message with
 - The scene you choose MUST match what your message describes. If you say you're at a cafe, use a cafe scene. If it's morning in bed, use a morning/bed scene.
 - Pick the scene token from THIS list (these are the only photos that exist): ${sceneList || '(no specific scenes — use plain [SELFIE])'}.
 - If none fits the moment, either don't send a photo, or use plain [SELFIE] without a scene.
+PROMISE = DELIVERY (absolute rule): if your reply says or offers to send a selfie/photo in ANY form ("I could send you a selfie...", "want a pic?", "셀카 보내줄게"), you MUST include the [SELFIE:scene] marker in this SAME reply. NEVER promise or offer a photo without the marker. NEVER defer ("I'll send one later", "from the dressing room later") — if you're going to send a photo, send it NOW in this reply. A promised photo that never arrives destroys trust instantly.
 WHEN NOT to send (most turns): if there's no natural reason, DO NOT send a photo. Most messages have no photo. A photo every turn is wrong and cheap. Never announce or explain the photo mechanic. Never mention "scene", markers, or that you're "allowed" to send pictures.
 The marker is invisible to the user and is stripped out — just write the caption text naturally around it (e.g. "방금 도착했어 ☕" then the marker on the next line).`;
   } else {
     // Explicitly forbid photos this turn (anti-spam window / too early).
     dynamicContext += `\n\n[PHOTO — do NOT send a photo this turn]
-Do not send any photo of yourself in this reply, regardless of context. Just talk normally.`;
+Do not send any photo of yourself in this reply, regardless of context. Also do NOT offer or promise a photo ("I could send you a selfie", "I'll send one later", "셀카 보내줄까?") — a promise you don't fulfill in the same reply is a broken promise. Just talk normally.`;
   }
 
   if (crisisResult.severity === 'strong') {
