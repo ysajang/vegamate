@@ -80,8 +80,9 @@ export function UpgradePrompt({
       const json = await res.json();
 
       if (json.success && json.data?.checkout_url) {
-        window.open(json.data.checkout_url, '_blank');
-        // Leave the card; user may complete payment in the new tab.
+        // Same-tab: in-app browsers (Meta ad traffic) block window.open —
+        // it killed every checkout (0/30 captured). return_url resumes here.
+        window.location.assign(json.data.checkout_url);
         return;
       }
 

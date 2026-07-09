@@ -67,13 +67,10 @@ export function GiftButton({
 
       switch (outcome.kind) {
         case 'redirect': {
-          const win = window.open(outcome.url, '_blank');
-          if (!win) {
-            // Popup blocked — give the user a way through instead of a dead button.
-            setNotice('Please allow popups to complete your gift, then tap again.');
-          } else {
-            onPurchaseComplete?.();
-          }
+          // Same-tab: in-app browsers (Meta ad traffic) block window.open —
+          // it killed every checkout (0/30 captured). return_url resumes here.
+          onPurchaseComplete?.();
+          window.location.assign(outcome.url);
           break;
         }
         case 'age_gate':

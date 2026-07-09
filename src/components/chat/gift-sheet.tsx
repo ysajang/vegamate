@@ -76,13 +76,15 @@ export function GiftSheet({
       switch (outcome.kind) {
         case 'redirect': {
           // Funnel: payment intent — user tapped a gift and we're sending them
-          // to PayPal. Fired before the popup so ad blockers on the new tab
-          // can't suppress it.
+          // to PayPal. Fired before navigation so it can't be suppressed.
           trackEvent('InitiateCheckout', { content_name: slug });
-          const win = window.open(outcome.url, '_blank');
-          if (!win) {
-            setNotice('Please allow popups to complete your gift, then try again.');
-          }
+          // SAME-TAB navigation, not window.open: Meta-ad traffic arrives in
+          // Instagram/Facebook in-app browsers where popups/new tabs are
+          // blocked or orphaned — window.open silently killed every checkout
+          // (prod 2026-07-09: 30/30 transactions created, 0 ever captured;
+          // /payment/return never hit once). The PayPal return_url brings the
+          // user back into the app in this same tab after approval.
+          window.location.assign(outcome.url);
           break;
         }
         case 'age_gate':
