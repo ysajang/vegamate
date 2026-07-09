@@ -73,6 +73,70 @@ describe('language directive in the system prompt (P0 Korean-leak fix)', () => {
     );
   });
 
+  it('en scenario: a FINAL language reminder sits at the END of the system prompt (closest to generation)', async () => {
+    await generateAIResponse({
+      ...baseParams,
+      userMessage: 'no sorry',
+      responseLanguage: 'en',
+    });
+
+    const sys = capturedSystemText();
+    // Prod 2026-07-09 4:03PM: with 30 Korean history messages, Haiku ignored
+    // the top-of-prompt directive. Weak models weight recent tokens — the rule
+    // must ALSO be the last thing before generation.
+    const reminderIdx = sys.indexOf('[LANGUAGE CHECK — FINAL RULE]');
+    expect(reminderIdx).toBeGreaterThan(-1);
+    expect(reminderIdx).toBeGreaterThan(sys.indexOf('너는 미쿠야'));
+    expect(sys.slice(reminderIdx)).toMatch(/entire reply in English/i);
+    expect(sys.slice(reminderIdx)).toMatch(/never ask the user to switch/i);
+  });
+
+  it('en scenario: a Korean-leaking reply triggers exactly ONE corrective retry', async () => {
+    createMock
+      .mockResolvedValueOnce(modelReply('어? 갑자기 영어? ㅋㅋㅋ 한국말로 해 제발'))
+      .mockResolvedValueOnce(modelReply("wait, English? okay okay lol. what are you up to?"));
+
+    const res = await generateAIResponse({
+      ...baseParams,
+      userMessage: 'no sorry',
+      responseLanguage: 'en',
+    });
+
+    expect(createMock).toHaveBeenCalledTimes(2);
+    expect(res.content).toBe("wait, English? okay okay lol. what are you up to?");
+    // The retry call must carry a corrective instruction.
+    const retryCall = createMock.mock.calls[1][0] as { system: Array<{ text: string }> };
+    expect(retryCall.system.map((b) => b.text).join('\n')).toMatch(/REWRITE|violated|only in English/i);
+  });
+
+  it('en scenario: if the retry ALSO leaks, the retry result is still used (no infinite loop)', async () => {
+    createMock
+      .mockResolvedValueOnce(modelReply('한국어 응답 1'))
+      .mockResolvedValueOnce(modelReply('한국어 응답 2'));
+
+    const res = await generateAIResponse({
+      ...baseParams,
+      userMessage: 'hello there',
+      responseLanguage: 'en',
+    });
+
+    expect(createMock).toHaveBeenCalledTimes(2);
+    expect(res.content).toBe('한국어 응답 2');
+  });
+
+  it('ko scenario: Korean reply triggers NO retry (normal behavior)', async () => {
+    createMock.mockResolvedValueOnce(modelReply('안녕! 오늘 리허설 힘들었어 ㅋㅋ'));
+
+    const res = await generateAIResponse({
+      ...baseParams,
+      userMessage: '뭐해?',
+      responseLanguage: 'ko',
+    });
+
+    expect(createMock).toHaveBeenCalledTimes(1);
+    expect(res.content).toContain('리허설');
+  });
+
   it('ko scenario: Korean replies stay the normal, expected behavior', async () => {
     await generateAIResponse({
       ...baseParams,

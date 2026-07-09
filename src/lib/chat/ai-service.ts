@@ -6,7 +6,12 @@ import { getAnthropicClient, withRetry } from './anthropic-client';
 import { parseSelfieMarker } from './selfie-context';
 import { buildGiftNudgeDirective } from './gift-nudge';
 import { giftPoolForStage } from './gift-picker';
-import { buildLanguageDirective } from './language-directive';
+import {
+  buildLanguageDirective,
+  buildLanguageReminder,
+  buildLanguageViolationCorrective,
+  needsLanguageRetry,
+} from './language-directive';
 import { resolveSelfieDecision } from './selfie-promise';
 
 interface GenerateResponseParams {
@@ -93,13 +98,41 @@ export async function generateAIResponse(
   );
 
   // Extract text from response content blocks
-  const responseContent = response.content
+  let responseContent = response.content
     .filter((block): block is Anthropic.Messages.TextBlock => block.type === 'text')
     .map((block) => block.text)
     .join('');
 
-  const tokensUsed =
+  let tokensUsed =
     (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0);
+
+  // One-shot deterministic guard: if a non-Korean target still got Korean,
+  // retry once with an explicit violation corrective. Prompt-only enforcement
+  // proved insufficient against Korean history momentum (prod 2026-07-09).
+  if (needsLanguageRetry(responseContent, params.responseLanguage)) {
+    console.warn('[AI] Korean leak for target', params.responseLanguage, '— corrective retry');
+    const retryResponse = await withRetry(() =>
+      anthropic.messages.create({
+        model: LLM_CONFIG.MODEL,
+        system: [
+          ...systemBlocks,
+          {
+            type: 'text' as const,
+            text: buildLanguageViolationCorrective(params.responseLanguage as string),
+          },
+        ],
+        messages,
+        max_tokens: LLM_CONFIG.MAX_TOKENS,
+        temperature: LLM_CONFIG.TEMPERATURE,
+      })
+    );
+    responseContent = retryResponse.content
+      .filter((block): block is Anthropic.Messages.TextBlock => block.type === 'text')
+      .map((block) => block.text)
+      .join('');
+    tokensUsed +=
+      (retryResponse.usage?.input_tokens || 0) + (retryResponse.usage?.output_tokens || 0);
+  }
 
   return {
     ...finalizeResponse(responseContent, {
@@ -186,8 +219,36 @@ export async function generateAIResponseStream(
   }
 
   const message = await stream.finalMessage();
-  const tokensUsed =
+  let tokensUsed =
     (message.usage?.input_tokens || 0) + (message.usage?.output_tokens || 0);
+
+  // Same one-shot language guard as the buffered path. The corrected text
+  // reaches the client via the final meta reconciliation (the bubble swaps);
+  // the briefly-streamed Korean draft is an acceptable cost for a rare case.
+  if (needsLanguageRetry(full, params.responseLanguage)) {
+    console.warn('[AI] Korean leak for target', params.responseLanguage, '— corrective retry (stream)');
+    const retryResponse = await withRetry(() =>
+      anthropic.messages.create({
+        model: LLM_CONFIG.MODEL,
+        system: [
+          ...systemBlocks,
+          {
+            type: 'text' as const,
+            text: buildLanguageViolationCorrective(params.responseLanguage as string),
+          },
+        ],
+        messages,
+        max_tokens: LLM_CONFIG.MAX_TOKENS,
+        temperature: LLM_CONFIG.TEMPERATURE,
+      })
+    );
+    full = retryResponse.content
+      .filter((block): block is Anthropic.Messages.TextBlock => block.type === 'text')
+      .map((block) => block.text)
+      .join('');
+    tokensUsed +=
+      (retryResponse.usage?.input_tokens || 0) + (retryResponse.usage?.output_tokens || 0);
+  }
 
   return {
     ...finalizeResponse(full, {
@@ -416,6 +477,14 @@ Do not send any photo of yourself in this reply, regardless of context. Also do 
     dynamicContext += `\n\nURGENT: The user is showing signs of severe distress or crisis. Respond with maximum empathy. Do NOT send selfies. Do NOT be playful. Be warm, caring, and genuine. Gently encourage them to reach out to someone who can help. Remind them they are valued and not alone. Stay in character but prioritize their wellbeing above everything else.`;
   } else if (crisisResult.severity === 'soft') {
     dynamicContext += `\n\nNOTE: The user seems to be going through a difficult time. Be extra warm and supportive. Listen carefully. Validate their feelings. Share some gentle encouragement. You can still be yourself, but lean into your caring side.`;
+  }
+
+  // Language reminder LAST — closest to generation. With a Korean-heavy
+  // history + persona, Haiku ignored the top-of-prompt directive in prod
+  // (2026-07-09); weak models weight the most recent tokens.
+  const languageReminder = buildLanguageReminder(responseLanguage ?? null);
+  if (languageReminder) {
+    dynamicContext += `\n\n${languageReminder}`;
   }
 
   // ── Build Anthropic system prompt (array for cache_control support) ──

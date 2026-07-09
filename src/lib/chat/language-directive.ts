@@ -128,3 +128,49 @@ export function buildLanguageDirective(lang: string | null): string {
 export function containsKoreanLeak(text: string): boolean {
   return /[\uAC00-\uD7A3\u3131-\u3163]/.test(text);
 }
+
+/**
+ * END-of-prompt language reminder for non-Korean targets, appended as the last
+ * dynamic-context lines (closest to generation).
+ *
+ * Why it exists: prod 2026-07-09 4:03PM — with ~30 Korean history messages and
+ * a Korean-flavored persona, Haiku ignored the TOP-of-prompt directive and even
+ * demanded the user switch back to Korean ("한국말로 해 제발"). Weak models weight
+ * recent tokens heavily; the rule must also be the last thing they read.
+ * Returns null for ko / unresolved — no reminder needed.
+ */
+export function buildLanguageReminder(lang: string | null): string | null {
+  if (!lang || lang === 'ko') return null;
+  const name = languageName(lang);
+  return (
+    `[LANGUAGE CHECK — FINAL RULE]\n` +
+    `Write your ENTIRE reply in ${name}. Zero Korean characters or Korean slang (ㅋㅋ/ㅎㅎ/ㅠㅠ). ` +
+    `The user is writing in ${name} — follow THEM immediately. Never ask the user to switch languages, ` +
+    `never complain about their language choice, never reply in Korean "in character". ` +
+    `Your personality stays the same; only the language is ${name}.`
+  );
+}
+
+/**
+ * Corrective system block for the single leak-retry. Injected when a generated
+ * reply for a non-Korean target still contained Korean.
+ */
+export function buildLanguageViolationCorrective(lang: string): string {
+  const name = languageName(lang);
+  return (
+    `[CRITICAL — LANGUAGE VIOLATION]\n` +
+    `Your previous draft violated the language rule: it contained Korean. ` +
+    `REWRITE your reply to the user's last message entirely in ${name} — no Korean characters, ` +
+    `no Korean slang, only in ${name}. Keep the same personality, warmth, and intent.`
+  );
+}
+
+/** Should this generated content trigger the one-shot language retry? */
+export function needsLanguageRetry(
+  content: string,
+  responseLanguage: string | null | undefined
+): boolean {
+  return Boolean(
+    responseLanguage && responseLanguage !== 'ko' && containsKoreanLeak(content)
+  );
+}
