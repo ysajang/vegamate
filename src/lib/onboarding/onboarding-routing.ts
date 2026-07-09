@@ -93,3 +93,29 @@ export function isAgeNotVerified(payload: {
 }): boolean {
   return payload?.success === false && payload?.code === 'AGE_NOT_VERIFIED';
 }
+
+/**
+ * Parse the `resume` character id from a location search string.
+ *
+ * Prod funnel loss (2026-07-09, user cra***): OAuth signups have display_name
+ * pre-filled by the DB trigger, the auth callback treated that as "onboarded",
+ * sent them to /select with age NEVER verified. Tapping a character then hit
+ * the server 403 age gate, bounced them to onboarding, and after verifying
+ * they were shown the character picker again from scratch — momentum dead,
+ * user gone. `?resume={characterId}` carries the original tap through the age
+ * gate so verification drops them straight into the chat they asked for.
+ *
+ * Strict UUID validation — the value round-trips through a URL.
+ */
+export function parseResumeCharacterId(search: string): string | null {
+  if (!search) return null;
+  let value: string | null = null;
+  try {
+    value = new URLSearchParams(search).get('resume');
+  } catch {
+    return null;
+  }
+  if (!value) return null;
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return UUID_RE.test(value) ? value : null;
+}

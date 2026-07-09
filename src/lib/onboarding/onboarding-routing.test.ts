@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  parseResumeCharacterId,
   isOnboardingComplete,
   resolveInitialOnboardingStep,
   stepToIndex,
@@ -100,5 +101,25 @@ describe('isAgeNotVerified (detect the server age-gate rejection)', () => {
     expect(isAgeNotVerified({ success: false, code: 'SOMETHING_ELSE' })).toBe(false);
     expect(isAgeNotVerified({ success: true })).toBe(false);
     expect(isAgeNotVerified({})).toBe(false);
+  });
+});
+
+describe('parseResumeCharacterId (post-age-gate conversation resume)', () => {
+  // Prod funnel loss 2026-07-09 (user cra***): OAuth signup → /select →
+  // tapped a character → 403 age gate → bounced to onboarding → verified age →
+  // was shown the character picker AGAIN from scratch → left. The resume param
+  // carries the original intent through the age gate.
+  it('extracts a valid character UUID from the query string', () => {
+    expect(
+      parseResumeCharacterId('?resume=a3bb189e-8bf9-3888-9912-ace4e6543002')
+    ).toBe('a3bb189e-8bf9-3888-9912-ace4e6543002');
+  });
+
+  it('returns null for missing / malformed / non-UUID values', () => {
+    expect(parseResumeCharacterId('')).toBe(null);
+    expect(parseResumeCharacterId('?other=1')).toBe(null);
+    expect(parseResumeCharacterId('?resume=')).toBe(null);
+    expect(parseResumeCharacterId('?resume=<script>')).toBe(null);
+    expect(parseResumeCharacterId('?resume=not-a-uuid')).toBe(null);
   });
 });

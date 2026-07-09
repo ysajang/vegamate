@@ -12,6 +12,7 @@ import {
   stepToIndex,
   recoverStepOnAgeBlocked,
   isAgeNotVerified,
+  parseResumeCharacterId,
 } from '@/lib/onboarding/onboarding-routing';
 
 /** Map character slug to accent color */
@@ -636,8 +637,45 @@ export default function OnboardingPage() {
   }
 
   function handleAgeVerified() {
+    // Resume path: the user already tapped a character on /select and was
+    // bounced here by the 403 age gate. Verification done — take them straight
+    // into that chat instead of restarting the picker (prod loss 2026-07-09).
+    const resumeCharId =
+      typeof window !== 'undefined'
+        ? parseResumeCharacterId(window.location.search)
+        : null;
+    if (resumeCharId) {
+      void resumeConversation(resumeCharId);
+      return;
+    }
     loadCharacters();
     setStep(2); // -> character select
+  }
+
+  async function resumeConversation(characterId: string) {
+    setIsCreating(true);
+    try {
+      const res = await fetch('/api/conversations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ character_id: characterId }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        trackEvent('CompleteRegistration');
+        router.push(`/chat/${json.data.conversation.id}`);
+        return;
+      }
+      // Unexpected failure (character deactivated, etc.) — fall back to the
+      // normal character step rather than dead-ending.
+      setIsCreating(false);
+      loadCharacters();
+      setStep(2);
+    } catch {
+      setIsCreating(false);
+      loadCharacters();
+      setStep(2);
+    }
   }
 
   function handleMinorBlocked() {

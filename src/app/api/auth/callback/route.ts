@@ -3,6 +3,7 @@ import type { EmailOtpType } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { safeNextPath } from '@/lib/auth/safe-redirect';
+import { isOnboardingComplete } from '@/lib/onboarding/onboarding-routing';
 
 /**
  * Auth callback for both flows:
@@ -74,11 +75,19 @@ export async function GET(request: Request) {
   if (user) {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('display_name')
+      .select('display_name, age_verified_adult')
       .eq('id', user.id)
       .single();
 
-    const onboarded = Boolean(profile?.display_name);
+    // Onboarded = name AND server age check. Judging by display_name alone
+    // (the old check) skipped the age step entirely for OAuth signups, whose
+    // display_name is pre-filled from provider metadata by the DB trigger —
+    // they landed on /select unverified and hit the 403 age gate on their
+    // first character tap (prod funnel loss, 2026-07-09).
+    const onboarded = isOnboardingComplete({
+      display_name: profile?.display_name,
+      age_verified_adult: profile?.age_verified_adult,
+    });
 
     // Not onboarded yet: ignore `next` entirely and force onboarding. A deep
     // link must never let a user skip the name/age step.

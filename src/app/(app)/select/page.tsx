@@ -71,9 +71,10 @@ export default function SelectPage() {
           router.push(`/chat/${json.data.conversation.id}`);
         } else if (isAgeNotVerified(json)) {
           // Reached select without completing the age step (e.g. deep link, or
-          // a zombie profile). Onboarding now lands such users on the AGE step
-          // (not the name step), so this no longer loops.
-          router.replace('/onboarding');
+          // a zombie profile). Carry the tapped character through the age gate
+          // so verification drops them straight into this chat instead of
+          // restarting the whole picker (prod funnel loss, 2026-07-09).
+          router.replace(`/onboarding?resume=${characterId}`);
         } else {
           setStarting(null);
         }
