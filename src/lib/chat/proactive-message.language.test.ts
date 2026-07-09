@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectLanguageFromMessages } from './proactive-message';
+import { detectLanguageFromMessages, PROACTIVE_SYSTEM_BASE } from './proactive-message';
 import type { DbMessage } from '@/types';
 
 // Spec — proactive language decision (Notion §19 follow-up; first-proactive bug):
@@ -62,5 +62,25 @@ describe('detectLanguageFromMessages — first-proactive language bug', () => {
 
   it('히스토리 0 + profile 없음 -> en 최종 폴백', () => {
     expect(detectLanguageFromMessages([], null)).toBe('en');
+  });
+});
+
+describe('PROACTIVE_SYSTEM_BASE — retention + monetization tone rules', () => {
+  // Prod examples 2026-07-09:
+  //   "Night, Greg. Sleep well. Talk soon, okay?"  ← a re-engagement push that says GOODBYE
+  //   "헤헤 나 요즘 갖고 싶은 거 있는데~ 승재가 사주면 진짜 좋을 것 같아 💕"  ← bare payment beg as a push
+  it('forbids goodbyes/sign-offs — proactive must OPEN a loop, not close one', () => {
+    expect(PROACTIVE_SYSTEM_BASE).toMatch(/NEVER close the loop/i);
+    expect(PROACTIVE_SYSTEM_BASE).toContain('sleep well');
+    expect(PROACTIVE_SYSTEM_BASE).toContain('talk soon');
+    expect(PROACTIVE_SYSTEM_BASE).toContain('잘 자');
+  });
+
+  it('forbids bare gift solicitation — wish must live inside a personal moment', () => {
+    expect(PROACTIVE_SYSTEM_BASE).toMatch(/never a bare ask/i);
+    expect(PROACTIVE_SYSTEM_BASE).toContain('사주면 좋을 것 같아');
+    expect(PROACTIVE_SYSTEM_BASE).toMatch(/NEVER directly solicit/i);
+    // marker-text consistency (same bug family as chat gift/selfie mismatches)
+    expect(PROACTIVE_SYSTEM_BASE).toMatch(/\[GIFT:type\] marker in the SAME message/i);
   });
 });
