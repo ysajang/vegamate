@@ -22,6 +22,32 @@ describe('resolveResponseLanguage — section-19 priority (conversation → prof
     expect(resolveResponseLanguage(history, '보고 싶었어', 'en')).toBe('ko');
   });
 
+  it('mid-conversation switch ko → en: the LATEST confident message wins over Korean history', () => {
+    // Prod report (2026-07-09): master chatted in Korean, switched to English,
+    // still got Korean — blob detection let old Hangul outvote the switch.
+    const history = [
+      msg('user', '안녕 오늘 뭐했어?'),
+      msg('assistant', '리허설 했지 ㅋㅋ'),
+      msg('user', '재밌었겠다'),
+    ];
+    expect(resolveResponseLanguage(history, "let's talk in English from now on", 'ko')).toBe('en');
+  });
+
+  it('mid-conversation switch en → ko works symmetrically', () => {
+    const history = [msg('user', 'hey how was practice'), msg('user', 'nice')];
+    expect(resolveResponseLanguage(history, '이제 한국어로 하자', 'en')).toBe('ko');
+  });
+
+  it('short/ambiguous latest message ("ok") inherits the most recent confident language', () => {
+    // "ok" is too short to detect — the scan walks back to the English switch,
+    // NOT all the way to a Korean blob.
+    const history = [
+      msg('user', '안녕 오늘 뭐했어?'),
+      msg('user', 'switching to English now please'),
+    ];
+    expect(resolveResponseLanguage(history, 'ok', 'ko')).toBe('en');
+  });
+
   it('ignores ASSISTANT Korean when judging the user language (AI leak must not self-reinforce)', () => {
     // The prod bug: Miku leaked Korean. That leak lives in assistant turns and
     // must never flip detection back to ko for an English user.

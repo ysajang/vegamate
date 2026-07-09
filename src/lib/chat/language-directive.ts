@@ -1,5 +1,8 @@
 import type { DbMessage } from '@/types';
-import { detectLanguageFromMessages } from './proactive-message';
+import {
+  detectLanguageFromMessages,
+  detectLanguageFromText,
+} from './proactive-message';
 
 /**
  * Response-language enforcement (P0 — Korean-leak fix).
@@ -20,6 +23,16 @@ import { detectLanguageFromMessages } from './proactive-message';
 
 /**
  * Resolve the language the AI must reply in for THIS turn.
+ *
+ * Tier order stays exactly section 19 (actual conversation → profile → 'en');
+ * WITHIN the conversation tier, detection is newest-first per message: the
+ * most recent user message with a confident detection wins. This honors a
+ * mid-conversation language switch ("let's talk in English") that the old
+ * whole-history blob scan drowned out — old Hangul in the last 30 messages
+ * kept outvoting the switch (prod report 2026-07-09). Short/ambiguous latest
+ * messages ("ok", "ㅎ") walk back to the previous confident message, so the
+ * conversation language is inherited, not reset.
+ *
  * Only USER turns count as evidence — assistant turns are excluded so an AI
  * Korean leak can never self-reinforce the wrong detection.
  */
@@ -28,13 +41,22 @@ export function resolveResponseLanguage(
   currentUserMessage: string,
   profileLanguage?: string | null
 ): string {
-  const userTurns = (Array.isArray(history) ? history : []).filter(
-    (m) => m && m.role === 'user'
+  const userTexts = (Array.isArray(history) ? history : [])
+    .filter((m) => m && m.role === 'user' && typeof m.content === 'string')
+    .map((m) => m.content);
+  userTexts.push(currentUserMessage ?? '');
+
+  // Newest → oldest: first confident single-message detection wins.
+  for (let i = userTexts.length - 1; i >= 0; i--) {
+    const detected = detectLanguageFromText(userTexts[i]);
+    if (detected) return detected;
+  }
+
+  // No single message was confident (all very short) → aggregate blob scan,
+  // then profile, then 'en' (unchanged section-19 fallback chain).
+  const withCurrent: DbMessage[] = userTexts.map(
+    (content) => ({ role: 'user', content } as DbMessage)
   );
-  const withCurrent: DbMessage[] = [
-    ...userTurns,
-    { role: 'user', content: currentUserMessage ?? '' } as DbMessage,
-  ];
   return detectLanguageFromMessages(withCurrent, profileLanguage);
 }
 

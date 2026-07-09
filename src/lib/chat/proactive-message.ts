@@ -37,7 +37,7 @@ export interface ProactiveMessageResult {
  *
  * Input is expected to be already-validated user message text.
  */
-function detectLanguageFromText(userMessages: string): string | null {
+export function detectLanguageFromText(userMessages: string): string | null {
   // Need a minimum amount of text to be confident
   if (!userMessages || userMessages.trim().length < 5) return null;
 
