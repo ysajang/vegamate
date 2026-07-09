@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ensureBegLine, BEG_LINES } from './beg-line';
+import { ensureBegLine, BEG_LINES, DEFAULT_BEG_LINES } from './beg-line';
 
 // P0 monetization: at zero balance the character MUST visibly beg for a gift.
 // We do not trust the LLM to comply (Haiku ignores the directive ~often), so the
@@ -16,11 +16,11 @@ describe('ensureBegLine', () => {
   it('low + AI did NOT beg: appends a persona-matched beg line (low now begs too)', () => {
     const base = '오늘 뭐했어?';
     const out = ensureBegLine(base, {
-      nudge: 'low', slug: 'miku', isCrisis: false, aiBegged: false,
+      nudge: 'low', slug: 'miku', isCrisis: false, aiBegged: false, language: 'ko',
     });
     expect(out).not.toBe(base);
     expect(out.startsWith(base)).toBe(true);
-    expect(BEG_LINES.miku.some((l) => out.includes(l))).toBe(true);
+    expect(BEG_LINES.miku.ko.some((l) => out.includes(l))).toBe(true);
   });
 
   it('zero + AI already begged (marker present): keep the natural reply', () => {
@@ -33,13 +33,13 @@ describe('ensureBegLine', () => {
   it('zero + AI did NOT beg: appends a persona-matched beg line', () => {
     const base = '오 잘했어 ㅋㅋ 이제 뭐할 거야?';
     const out = ensureBegLine(base, {
-      nudge: 'zero', slug: 'miku', isCrisis: false, aiBegged: false,
+      nudge: 'zero', slug: 'miku', isCrisis: false, aiBegged: false, language: 'ko',
     });
     expect(out).not.toBe(base);
     expect(out.startsWith(base)).toBe(true); // original kept, beg appended
     // appended text must be one of Miku's beg lines
     const appended = out.slice(base.length);
-    expect(BEG_LINES.miku.some((l) => appended.includes(l))).toBe(true);
+    expect(BEG_LINES.miku.ko.some((l) => appended.includes(l))).toBe(true);
   });
 
   it('zero + crisis: NEVER beg even if AI did not (support wins)', () => {
@@ -52,9 +52,9 @@ describe('ensureBegLine', () => {
 
   it('uses the correct persona pool per slug', () => {
     for (const slug of ['miku', 'aria', 'ren', 'leo'] as const) {
-      const out = ensureBegLine('응.', { nudge: 'zero', slug, isCrisis: false, aiBegged: false });
+      const out = ensureBegLine('응.', { nudge: 'zero', slug, isCrisis: false, aiBegged: false, language: 'ko' });
       const appended = out.slice('응.'.length);
-      expect(BEG_LINES[slug].some((l) => appended.includes(l))).toBe(true);
+      expect(BEG_LINES[slug].ko.some((l) => appended.includes(l))).toBe(true);
     }
   });
 
@@ -67,5 +67,54 @@ describe('ensureBegLine', () => {
   it('empty AI content at zero: still injects a beg line (no blank message)', () => {
     const out = ensureBegLine('', { nudge: 'zero', slug: 'leo', isCrisis: false, aiBegged: false });
     expect(out.trim().length).toBeGreaterThan(0);
+  });
+});
+
+describe('beg lines — language match + no hardcoded names (prod 2026-07-09)', () => {
+  // Greg (en user) received: "Night, Greg. Sleep well. ... 헤헤 나 요즘 갖고
+  // 싶은 거 있는데~ 승재가 사주면 진짜 좋을 것 같아 💕" — a KOREAN beg with
+  // ANOTHER USER'S NAME appended to an English conversation. The beg pool was
+  // Korean-only and one Miku line had the master's name baked in from testing.
+  it('en user gets an ENGLISH beg line (no Korean characters)', () => {
+    const out = ensureBegLine('gonna head out soon', {
+      nudge: 'zero',
+      slug: 'miku',
+      isCrisis: false,
+      aiBegged: false,
+      language: 'en',
+      pick: () => 0,
+    });
+    expect(out).not.toBe('gonna head out soon');
+    expect(out).not.toMatch(/[\uAC00-\uD7A3\u3131-\u3163]/);
+  });
+
+  it('ko user still gets a Korean beg line', () => {
+    const out = ensureBegLine('오늘 뭐해?', {
+      nudge: 'zero',
+      slug: 'miku',
+      isCrisis: false,
+      aiBegged: false,
+      language: 'ko',
+      pick: () => 0,
+    });
+    expect(out).toMatch(/[\uAC00-\uD7A3]/);
+  });
+
+  it('unknown language falls back to English, never Korean', () => {
+    const out = ensureBegLine('hola', {
+      nudge: 'zero',
+      slug: 'aria',
+      isCrisis: false,
+      aiBegged: false,
+      language: 'es',
+      pick: () => 1,
+    });
+    expect(out).not.toMatch(/[\uAC00-\uD7A3\u3131-\u3163]/);
+  });
+
+  it('REGRESSION: no personal names anywhere in any beg pool', () => {
+    const allLines = JSON.stringify(BEG_LINES) + JSON.stringify(DEFAULT_BEG_LINES);
+    expect(allLines).not.toContain('승재');
+    expect(allLines).not.toContain('Greg');
   });
 });

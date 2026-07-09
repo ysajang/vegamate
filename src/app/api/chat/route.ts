@@ -365,6 +365,9 @@ async function handler(req: NextRequest) {
     slug: character.slug || 'default',
     isCrisis: giftSuppressedByCrisis,
     aiBegged: replyAlreadyBegs,
+    // The beg is appended AFTER all LLM-side language enforcement — this is
+    // its only language guard (prod: Korean beg sent to an English user).
+    language: responseLanguage,
   });
 
   // 12. Save AI response message
