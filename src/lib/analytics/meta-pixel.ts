@@ -83,8 +83,17 @@ export function trackEvent(
   event: 'CompleteRegistration' | 'Lead' | 'InitiateCheckout' | 'Purchase',
   params?: Record<string, unknown>,
 ): void {
+  if (!pixelEnabled()) return;
+  // Self-heal: React runs CHILD (page) effects before the root layout's
+  // PixelProvider effect, so an event fired in an early page effect can land
+  // before the fbq stub exists — the old `if (!fbq) return` silently dropped
+  // it. Stub creation is synchronous, so initializing here guarantees a queue
+  // that fbevents.js flushes once loaded; ordering can never drop an event.
+  if (!window.fbq) {
+    initMetaPixel();
+  }
   const fbq = window.fbq;
-  if (!pixelEnabled() || !fbq) return;
+  if (!fbq) return; // init itself refused (disabled env) — nothing to do
   if (params) {
     fbq('track', event, params);
   } else {
