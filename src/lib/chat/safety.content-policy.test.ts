@@ -25,3 +25,24 @@ describe('SAFETY_SYSTEM_PROMPT — explicit content policy', () => {
     expect(SAFETY_SYSTEM_PROMPT).toMatch(/The answer never becomes yes/i);
   });
 });
+
+// P0-c(b) — prod 2026-07-09: Miku collapsed into assistant-refusal mode for 8
+// straight turns ("I will not reply to further messages" / "I'm blocking
+// further replies" / "contact a real person or service") — threatening a block
+// feature that does not exist. The Character-AI death pattern: every persona
+// converging into the same refusal bot.
+describe('SAFETY_SYSTEM_PROMPT — no persona collapse on refusal (P0-c(b))', () => {
+  it('names the observed collapse phrases as forbidden', () => {
+    expect(SAFETY_SYSTEM_PROMPT).toMatch(/NEVER BREAK CHARACTER WHEN REFUSING/);
+    expect(SAFETY_SYSTEM_PROMPT).toContain('I will not reply to further messages');
+    expect(SAFETY_SYSTEM_PROMPT).toContain("I'm blocking further replies");
+    expect(SAFETY_SYSTEM_PROMPT).toContain('contact a real');
+    expect(SAFETY_SYSTEM_PROMPT).toMatch(/NO block feature/i);
+  });
+
+  it('requires in-character refusal with topic change, and preserves crisis handling', () => {
+    expect(SAFETY_SYSTEM_PROMPT).toMatch(/Refuse the way YOUR CHARACTER would/i);
+    expect(SAFETY_SYSTEM_PROMPT).toMatch(/OPEN A NEW TOPIC/);
+    expect(SAFETY_SYSTEM_PROMPT).toMatch(/safety response always wins/i);
+  });
+});

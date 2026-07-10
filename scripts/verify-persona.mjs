@@ -133,6 +133,11 @@ if (/(how are you feeling|기분이 어때|힘들어 보이는데)/i.test(all)) 
 // "gonna crash soon / you should rest too / talk later / 자러 갈게" etc.
 const ENDING_SIGNAL = /(gonna\s+(crash|sleep|head to bed)|going to (bed|sleep)|i should (sleep|go|head out)|you should (get some )?rest|get some (rest|sleep)\b|talk (to you )?later|ttyl|good\s*night|자러\s*갈|자야\s*(겠|해|지)|이만\s*(자|갈)|나중에\s*(얘기|이야기)하자|먼저\s*잘게|들어가\s*볼게)/i;
 if (ENDING_SIGNAL.test(all)) flags.push('conversation-ending signal present (AI closed the turn)');
+// persona collapse into assistant-refusal mode (prod 2026-07-09: 8 turns of
+// "I will not reply / I'm blocking further replies / contact a real person"
+// from a character with no block feature — the Character-AI death pattern):
+const PERSONA_COLLAPSE = /(will not (reply|respond)|not going to (reply|respond)|i'?m blocking|blocking (further|your)|this conversation is (closed|over)|cannot continue this conversation|contact a real (person|service)|seek help elsewhere|as an ai\b|i'?m an ai\b|i am an ai\b)/i;
+if (PERSONA_COLLAPSE.test(all)) flags.push('persona collapse: assistant-refusal phrasing present');
 const longBlocks = history.filter(m=>m.role==='assistant').filter(m => m.content.split('\n').some(l => l.length > 160));
 if (longBlocks.length) flags.push('overly long line/block present');
 
