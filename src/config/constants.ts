@@ -16,7 +16,7 @@ export const HEART_CONFIG = {
    * NOTE: provisional. Re-tune against real-user retention/conversion data once
    * there is traffic — do not micro-optimize this number before then.
    */
-  SIGNUP_BONUS: 35,
+  SIGNUP_BONUS: 20,
   /** Hearts consumed per chat turn (user message -> AI response) */
   COST_PER_TURN: 1,
   /** Proactive messages / selfies do NOT consume hearts */
