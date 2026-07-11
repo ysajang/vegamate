@@ -1,3 +1,4 @@
+import { detectUserSelfieRequest } from './selfie-promise';
 /**
  * Deterministic "조르기" (gift-beg) guarantee for the zero-balance state.
  *
@@ -114,10 +115,24 @@ export interface EnsureBegInput {
    */
   language?: string;
   /**
+   * The user's message this turn was a DIRECT request (selfie ask / question).
+   * Direct requests get fulfilled, not begged at — the beg line lives in
+   * small-talk turns only (prod hijack fix, 2026-07-11: a selfie request was
+   * answered with gift begging).
+   */
+  isDirectRequestTurn?: boolean;
+  /**
    * Optional deterministic index picker (for tests). Defaults to random.
    * Receives the pool length, returns an index.
    */
   pick?: (len: number) => number;
+}
+
+/** Is this user message a direct request (explicit selfie ask or a question)? */
+export function isDirectRequestTurn(userMessage: string): boolean {
+  if (!userMessage) return false;
+  if (detectUserSelfieRequest(userMessage)) return true;
+  return /[?？]\s*$/.test(userMessage.trim());
 }
 
 /**
@@ -126,11 +141,12 @@ export interface EnsureBegInput {
  * in which case a short persona-matched beg line is appended to the reply.
  */
 export function ensureBegLine(content: string, input: EnsureBegInput): string {
-  const { nudge, slug, isCrisis, aiBegged, language, pick } = input;
+  const { nudge, slug, isCrisis, aiBegged, language, pick, isDirectRequestTurn: direct } = input;
 
   if (nudge === 'none') return content;
   if (isCrisis) return content;
   if (aiBegged) return content;
+  if (direct) return content; // fulfil the request; beg in small-talk turns only
 
   const pools = BEG_LINES[slug] ?? DEFAULT_BEG_LINES;
   const pool = language === 'ko' ? pools.ko : pools.en;

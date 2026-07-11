@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ensureBegLine, BEG_LINES, DEFAULT_BEG_LINES } from './beg-line';
+import { ensureBegLine, isDirectRequestTurn, BEG_LINES, DEFAULT_BEG_LINES } from './beg-line';
 
 // P0 monetization: at zero balance the character MUST visibly beg for a gift.
 // We do not trust the LLM to comply (Haiku ignores the directive ~often), so the
@@ -116,5 +116,40 @@ describe('beg lines — language match + no hardcoded names (prod 2026-07-09)', 
     const allLines = JSON.stringify(BEG_LINES) + JSON.stringify(DEFAULT_BEG_LINES);
     expect(allLines).not.toContain('승재');
     expect(allLines).not.toContain('Greg');
+  });
+});
+
+describe('beg suppression on direct-request turns (hijack fix, 2026-07-11)', () => {
+  // Prod: user asked "너 셀카 보여줘" and the reply carried gift_request=book —
+  // a selfie request answered with begging. Direct requests get fulfilled,
+  // begs live in small-talk turns only.
+  const base = {
+    nudge: 'zero' as const,
+    slug: 'miku',
+    isCrisis: false,
+    aiBegged: false,
+    language: 'ko' as const,
+    pick: () => 0,
+  };
+
+  it('selfie-request turn → beg NOT appended even at zero balance', () => {
+    const out = ensureBegLine('알겠어 잠깐만 ㅋㅋ', { ...base, isDirectRequestTurn: true });
+    expect(out).toBe('알겠어 잠깐만 ㅋㅋ');
+  });
+
+  it('question turn → beg NOT appended', () => {
+    const out = ensureBegLine('음 그건...', { ...base, isDirectRequestTurn: true });
+    expect(out).toBe('음 그건...');
+  });
+
+  it('small-talk turn → beg still appended (zero-state monetization intact)', () => {
+    const out = ensureBegLine('오늘 리허설 힘들었어', { ...base, isDirectRequestTurn: false });
+    expect(out).not.toBe('오늘 리허설 힘들었어');
+  });
+
+  it('isDirectRequestTurn helper: selfie requests and questions count, small talk does not', () => {
+    expect(isDirectRequestTurn('너 셀카 보여줘')).toBe(true);
+    expect(isDirectRequestTurn('내일 스케줄 뭐야?')).toBe(true);
+    expect(isDirectRequestTurn('오늘 완전 피곤했어 ㅋㅋ')).toBe(false);
   });
 });
