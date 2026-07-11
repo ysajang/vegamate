@@ -74,6 +74,10 @@ async function handler(req: NextRequest) {
   const giftSlug = sanitizeString(body.gift_slug);
   const characterId = sanitizeString(body.character_id);
   const surface = sanitizeString(body.surface) || 'gift_sheet';
+  // Blur-teaser unlock: optional binding — this purchase unblurs ONE specific
+  // premium card on webhook confirmation. Validated below (premium + same
+  // character + $4.99+ gift); invalid bindings are dropped, never fatal.
+  const unblurSelfieIdRaw = sanitizeString(body.unblur_selfie_id ?? '');
 
   if (!giftSlug) {
     throw new AppError('gift_slug is required');
@@ -147,6 +151,19 @@ async function handler(req: NextRequest) {
     });
   }
 
+  // 6.5 Validate the unblur binding (best-effort; drop silently when invalid)
+  let unblurSelfieId: string | null = null;
+  if (unblurSelfieIdRaw && isValidUUID(unblurSelfieIdRaw) && Number(gift.price_usd) >= 4.98) {
+    const { data: target } = await serviceClient
+      .from('selfie_pool')
+      .select('id, tier, character_id')
+      .eq('id', unblurSelfieIdRaw)
+      .single();
+    if (target && target.tier && target.tier !== 'free' && target.character_id === characterId) {
+      unblurSelfieId = target.id;
+    }
+  }
+
   // 7. Log allowed intent
   await serviceClient.from('payment_intent_log').insert({
     user_id: user.id,
@@ -168,6 +185,7 @@ async function handler(req: NextRequest) {
   const { data: tx, error: txError } = await serviceClient
     .from('gift_transactions')
     .insert({
+      ...(unblurSelfieId ? { unblur_selfie_id: unblurSelfieId } : {}),
       user_id: user.id,
       character_id: characterId,
       gift_id: gift.id,

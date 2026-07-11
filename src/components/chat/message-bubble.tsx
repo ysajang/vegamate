@@ -38,6 +38,9 @@ function SelfieInline({ selfie }: SelfieInlineProps) {
   // Round 1.5: premium selfies show a small unlock badge. Reuses this card —
   // no new screens.
   const isPremium = Boolean(selfie.tier && selfie.tier !== 'free');
+  // Entitlement-gated originals (/api/selfies/{id}/image) must bypass the
+  // Next image optimizer: its server-side fetch carries no auth cookies.
+  const gated = selfie.image_url.startsWith('/api/');
 
   if (expanded) {
     return (
@@ -62,6 +65,7 @@ function SelfieInline({ selfie }: SelfieInlineProps) {
             width={340}
             height={450}
             className="h-auto w-full object-cover"
+            unoptimized={gated}
           />
         </div>
       </div>
@@ -106,6 +110,7 @@ function SelfieInline({ selfie }: SelfieInlineProps) {
         alt="selfie"
         width={220}
         height={280}
+        unoptimized={gated}
         className="w-full object-cover transition-opacity duration-300"
         style={{
           opacity: loaded ? 1 : 0,
@@ -113,6 +118,67 @@ function SelfieInline({ selfie }: SelfieInlineProps) {
         }}
         onLoad={() => setLoaded(true)}
       />
+    </div>
+  );
+}
+
+interface BlurTeaserMeta {
+  selfie_id: string;
+  blurred_url: string;
+  tier: string;
+  caption: string;
+  cta: string;
+  min_gift_usd: number;
+}
+
+/**
+ * Blur-teaser card (round 1.5): a locked premium selfie shown partially
+ * blurred (server-side pre-generated — the original never reaches the
+ * client). CTA opens the gift sheet filtered to qualifying gifts; the
+ * purchase is bound to this card and the webhook unblurs it.
+ */
+function BlurTeaserCard({ meta, characterId, characterName }: {
+  meta: BlurTeaserMeta;
+  characterId?: string;
+  characterName?: string;
+}) {
+  const [sheetOpen, setSheetOpen] = useState(false);
+  return (
+    <div
+      className="relative mt-1 overflow-hidden"
+      style={{ borderRadius: 14, border: '1px solid var(--vm-purple-soft, #a78bfa)', maxWidth: 220 }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={meta.blurred_url}
+        alt="private photo"
+        className="w-full object-cover"
+        style={{ maxHeight: 280 }}
+      />
+      <div className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold text-white" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}>
+        <span aria-hidden>🔒</span>
+      </div>
+      <div className="absolute inset-x-0 bottom-0 flex flex-col gap-1.5 p-2.5" style={{ background: 'linear-gradient(transparent, rgba(0,0,0,0.75))' }}>
+        <p className="text-[12px] leading-snug text-white/90">{meta.caption}</p>
+        <button
+          type="button"
+          onClick={() => setSheetOpen(true)}
+          className="h-9 w-full rounded-xl text-[13px] font-bold text-white transition-all active:scale-[0.98]"
+          style={{ background: 'var(--vm-purple)' }}
+        >
+          {meta.cta}
+        </button>
+      </div>
+      {characterId && (
+        <GiftSheetLazy
+          isOpen={sheetOpen}
+          onClose={() => setSheetOpen(false)}
+          characterId={characterId}
+          characterName={characterName}
+          minPriceUsd={meta.min_gift_usd}
+          unblurSelfieId={meta.selfie_id}
+        />
+      )}
     </div>
   );
 }
@@ -148,6 +214,8 @@ export function MessageBubble({
 }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const selfie = message.selfie;
+  const blurTeaser = (message.metadata as { blur_teaser?: BlurTeaserMeta } | null | undefined)
+    ?.blur_teaser;
 
   // Editable only when handlers are provided and it's a real (persisted) message.
   const canModify =
@@ -286,6 +354,11 @@ export function MessageBubble({
           <SelfieInline selfie={selfie} />
         )}
 
+        {/* Blurred premium teaser (locked card + unlock CTA) */}
+        {!isUser && blurTeaser?.blurred_url && (
+          <BlurTeaserCard meta={blurTeaser} characterId={characterId} characterName={characterName} />
+        )}
+
         {/* Time + edited + read indicator */}
         <div
           className={`flex items-center gap-1.5 ${isUser ? 'justify-end pr-0.5' : 'justify-start pl-0.5'}`}
@@ -388,6 +461,27 @@ export function MessageBubble({
       )}
     </div>
   );
+}
+
+/** Lazy-loaded gift sheet for the blur-teaser CTA (mirrors GiftButtonLazy). */
+function GiftSheetLazy(props: {
+  isOpen: boolean;
+  onClose: () => void;
+  characterId: string;
+  characterName?: string;
+  minPriceUsd?: number | null;
+  unblurSelfieId?: string | null;
+}) {
+  const [Sheet, setSheet] = useState<React.ComponentType<typeof props> | null>(null);
+
+  useState(() => {
+    import('./gift-sheet').then((mod) => {
+      setSheet(() => mod.GiftSheet as unknown as React.ComponentType<typeof props>);
+    });
+  });
+
+  if (!Sheet || !props.isOpen) return props.isOpen ? null : null;
+  return <Sheet {...props} />;
 }
 
 /** Lazy-loaded gift button to avoid importing in every bubble */

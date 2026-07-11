@@ -210,7 +210,7 @@ export async function sendGiftReaction(
   // 1. Load transaction + gift + character context
   const { data: tx } = await serviceClient
     .from('gift_transactions')
-    .select('id, user_id, character_id, gift_id, status')
+    .select('id, user_id, character_id, gift_id, status, unblur_selfie_id')
     .eq('id', giftTxId)
     .single();
 
@@ -267,10 +267,40 @@ export async function sendGiftReaction(
   let selfieRarity: string | null = null;
   let selfieTier: string | null = null;
 
+  // (U) Unblur binding wins: the buyer paid to see ONE specific blurred card —
+  //     deliver exactly that selfie (grant + unblurred send). Per-tx idempotency
+  //     is the same message guard as everything else in this function.
+  const boundSelfieId = (tx as { unblur_selfie_id?: string | null }).unblur_selfie_id ?? null;
+  if (boundSelfieId) {
+    try {
+      const { data: selfie } = await serviceClient
+        .from('selfie_pool')
+        .select('id, rarity, tier')
+        .eq('id', boundSelfieId)
+        .single();
+      if (selfie) {
+        selfieId = selfie.id;
+        selfieRarity = selfie.rarity;
+        selfieTier = (selfie as { tier?: string }).tier ?? null;
+        await serviceClient.from('user_selfie_collection').upsert(
+          {
+            user_id: tx.user_id,
+            selfie_id: selfie.id,
+            character_id: character.id,
+            rarity: selfie.rarity,
+          },
+          { onConflict: 'user_id,selfie_id' }
+        );
+      }
+    } catch (err) {
+      console.warn('[GiftReaction] Unblur grant failed (non-critical):', err);
+    }
+  }
+
   const rewardTier = thankYouTierForAmount(
     gift.price_usd == null ? null : Number(gift.price_usd)
   );
-  if (rewardTier) {
+  if (!selfieId && rewardTier) {
     try {
       const { data: premiumId } = await serviceClient.rpc('pick_selfie_by_scene', {
         p_character_id: character.id,
@@ -370,6 +400,9 @@ export async function sendGiftReaction(
     if (selfieTier && selfieTier !== 'free') {
       // Surfaces the tier badge on the selfie card (minimal UI, round 1.5).
       (insert.metadata as Record<string, unknown>).selfie_tier = selfieTier;
+    }
+    if (boundSelfieId && selfieId === boundSelfieId) {
+      (insert.metadata as Record<string, unknown>).unblurred = true;
     }
   }
 

@@ -21,6 +21,10 @@ interface GiftSheetProps {
   /** Character display name — the sheet is framed as gifting THIS character. */
   characterName?: string;
   exhaustionMessage?: string | null;
+  /** Blur-teaser unlock: only show gifts at/above this price. */
+  minPriceUsd?: number | null;
+  /** Blur-teaser unlock: bind the purchase to this card (webhook unblurs it). */
+  unblurSelfieId?: string | null;
 }
 
 export function GiftSheet({
@@ -29,6 +33,8 @@ export function GiftSheet({
   characterId,
   characterName,
   exhaustionMessage,
+  minPriceUsd,
+  unblurSelfieId,
 }: GiftSheetProps) {
   const [gifts, setGifts] = useState<GiftItem[]>([]);
   const [loadingSlug, setLoadingSlug] = useState<string | null>(null);
@@ -46,14 +52,20 @@ export function GiftSheet({
         const res = await fetch('/api/gifts');
         const json = await res.json();
         if (json.success) {
-          setGifts(json.data.gifts);
+          const all = json.data.gifts as GiftItem[];
+          // Blur-teaser unlock mode: only gifts that qualify ($4.99+).
+          setGifts(
+            minPriceUsd
+              ? all.filter((g) => Number(g.price_usd) >= minPriceUsd - 0.01)
+              : all
+          );
         }
       } catch {
         // Silent
       }
     }
     loadGifts();
-  }, [isOpen]);
+  }, [isOpen, minPriceUsd]);
 
   const handlePurchase = async (slug: string) => {
     if (loadingSlug) return;
@@ -67,6 +79,7 @@ export function GiftSheet({
         body: JSON.stringify({
           gift_slug: slug,
           character_id: characterId,
+          ...(unblurSelfieId ? { unblur_selfie_id: unblurSelfieId } : {}),
         }),
       });
 

@@ -10,6 +10,12 @@ import { getCharacterScenes } from '@/lib/chat/selfie-context';
 import { generateAIResponseStream } from '@/lib/chat/ai-service';
 import { resolveResponseLanguage } from '@/lib/chat/language-directive';
 import { resolveAllowedTiers } from '@/lib/chat/selfie-tier';
+import {
+  detectExplicitPhotoRequest,
+  teaserQuotaAvailable,
+  pickTeaserTier,
+  TEASER_COPY,
+} from '@/lib/chat/blur-teaser';
 import { encodeStreamEvent, type StreamEvent } from '@/lib/chat/stream-protocol';
 import {
   fetchUserMemories,
@@ -139,7 +145,7 @@ async function handler(req: NextRequest) {
     // Language enforcement input (best-effort — resolver falls back to 'en').
     serviceClient
       .from('profiles')
-      .select('preferred_language')
+      .select('preferred_language, last_blur_teaser_at')
       .eq('id', user.id)
       .single(),
   ]);
@@ -281,19 +287,20 @@ async function handler(req: NextRequest) {
         );
 
   // The AI's choice drives selfie sending (crisis already suppressed upstream).
+  // Tier gating (round 1.5): tiers this user's picks may draw from
+  // (Lover subscription and/or max intimacy). Inaccessible tiers are simply
+  // absent from the pool — no error, free behavior unchanged (default free).
+  const allowedTiers = resolveAllowedTiers({
+    hasActiveLover: isSubscriber,
+    intimacyStage: conversation.intimacy_stage ?? 0,
+  });
+
   let willSendSelfie = aiResult.sendSelfie && aiResult.crisisSeverity === 'none';
 
   // 10. If the AI chose to send a selfie, pick one matching its scene
   let selfieData: DbSelfie | null = null;
 
   if (willSendSelfie) {
-    // Tier gating: the pick may only draw from tiers this user can access
-    // (Lover subscription and/or max intimacy). Inaccessible tiers are simply
-    // absent from the pool — no error, free behavior unchanged (default free).
-    const allowedTiers = resolveAllowedTiers({
-      hasActiveLover: isSubscriber,
-      intimacyStage: conversation.intimacy_stage ?? 0,
-    });
     const { data: selfieIdResult } = await serviceClient.rpc('pick_selfie_by_scene', {
       p_character_id: character.id,
       p_user_id: user.id,
@@ -379,6 +386,53 @@ async function handler(req: NextRequest) {
     language: responseLanguage,
   });
 
+  // 12.pre — Blur teaser (round 1.5): explicit photo request + no premium
+  // access + daily quota → attach ONE blurred locked-tier card to this reply.
+  // The in-character refusal text comes from the model (safety rule 5); the
+  // card is deterministic server-side. NOT added to the collection — the
+  // entitlement gate must keep the original locked until an unblur purchase.
+  let teaser: {
+    selfie_id: string;
+    blurred_url: string;
+    tier: string;
+    caption: string;
+    cta: string;
+    min_gift_usd: number;
+  } | null = null;
+  if (
+    aiResult.crisisSeverity === 'none' &&
+    detectExplicitPhotoRequest(content) &&
+    teaserQuotaAvailable(profileRes.data?.last_blur_teaser_at ?? null)
+  ) {
+    const teaserTier = pickTeaserTier(allowedTiers);
+    if (teaserTier) {
+      const { data: teaserId } = await serviceClient.rpc('pick_selfie_by_scene', {
+        p_character_id: character.id,
+        p_user_id: user.id,
+        p_scene: null,
+        p_allowed_tiers: [teaserTier],
+      });
+      if (teaserId) {
+        const { data: teaserSelfie } = await serviceClient
+          .from('selfie_pool')
+          .select('id, tier, blurred_url')
+          .eq('id', teaserId as string)
+          .single();
+        if (teaserSelfie?.blurred_url) {
+          const lang = TEASER_COPY[responseLanguage === 'ko' ? 'ko' : 'en'];
+          teaser = {
+            selfie_id: teaserSelfie.id,
+            blurred_url: teaserSelfie.blurred_url,
+            tier: teaserSelfie.tier ?? teaserTier,
+            caption: lang.caption,
+            cta: lang.cta,
+            min_gift_usd: 4.99,
+          };
+        }
+      }
+    }
+  }
+
   // 12. Save AI response message
   const aiMessage: {
     conversation_id: string;
@@ -402,6 +456,7 @@ async function handler(req: NextRequest) {
       trigger_type: willSendSelfie ? 'ai_contextual' : null,
       selfie_scene: willSendSelfie ? aiResult.selfieScene : null,
       gift_request: effectiveGiftSlug,
+      ...(teaser ? { blur_teaser: teaser } : {}),
     },
   };
 
@@ -415,6 +470,14 @@ async function handler(req: NextRequest) {
     .insert(aiMessage)
     .select('*, selfie:selfie_pool(*)')
     .single();
+
+  if (teaser && !aiMsgError) {
+    // Consume the daily teaser quota only when the card actually landed.
+    await serviceClient
+      .from('profiles')
+      .update({ last_blur_teaser_at: new Date().toISOString() })
+      .eq('id', user.id);
+  }
 
   if (aiMsgError) {
     console.error('[Chat] Failed to save AI message:', aiMsgError);
