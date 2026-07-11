@@ -63,6 +63,10 @@ interface GenerateResponseParams {
    * leaked Korean to English users in prod.
    */
   responseLanguage?: string;
+  /** The user explicitly asked for a selfie this turn (route-detected). */
+  userRequestedSelfie?: boolean;
+  /** User selfie requests this session, including this one. */
+  selfieRequestCount?: number;
 }
 
 interface GenerateResponseResult {
@@ -139,6 +143,8 @@ export async function generateAIResponse(
       selfieAllowed: actualSelfieAllowed,
       isCrisis: crisisSeverity !== 'none',
       availableScenes: params.availableScenes ?? [],
+      userRequestedSelfie: params.userRequestedSelfie ?? false,
+      selfieRequestCount: params.selfieRequestCount ?? 0,
     }),
     tokensUsed,
     responseTimeMs: Date.now() - startTime,
@@ -255,6 +261,8 @@ export async function generateAIResponseStream(
       selfieAllowed: actualSelfieAllowed,
       isCrisis: crisisSeverity !== 'none',
       availableScenes: params.availableScenes ?? [],
+      userRequestedSelfie: params.userRequestedSelfie ?? false,
+      selfieRequestCount: params.selfieRequestCount ?? 0,
     }),
     tokensUsed,
     responseTimeMs: Date.now() - startTime,
@@ -290,7 +298,13 @@ function findMarkerOpener(text: string): number {
  */
 function finalizeResponse(
   responseContent: string,
-  opts: { selfieAllowed: boolean; isCrisis: boolean; availableScenes: string[] }
+  opts: {
+    selfieAllowed: boolean;
+    isCrisis: boolean;
+    availableScenes: string[];
+    userRequestedSelfie?: boolean;
+    selfieRequestCount?: number;
+  }
 ): Pick<
   GenerateResponseResult,
   'content' | 'selfieCaption' | 'selfieScene' | 'sendSelfie'
@@ -305,6 +319,8 @@ function finalizeResponse(
     selfieAllowed: opts.selfieAllowed,
     isCrisis: opts.isCrisis,
     availableScenes: opts.availableScenes,
+    userRequestedSelfie: opts.userRequestedSelfie ?? false,
+    selfieRequestCount: opts.selfieRequestCount ?? 0,
   });
 
   return {
@@ -329,7 +345,7 @@ interface PromptPayload {
  * context, and prompt caching.
  */
 function buildPromptPayload(params: GenerateResponseParams): PromptPayload {
-  const { character, history, userMessage, selfieAllowed, availableScenes, memoryContext, messageCount, heartsRemaining, giftNudge, intimacyStage, responseLanguage } = params;
+  const { character, history, userMessage, selfieAllowed, availableScenes, memoryContext, messageCount, heartsRemaining, giftNudge, intimacyStage, responseLanguage, userRequestedSelfie, selfieRequestCount } = params;
 
   // Crisis detection (keyword-based first pass — model provides second pass).
   // Pass recent user messages so a dangerous follow-up right after a strong
@@ -483,6 +499,17 @@ Do not send any photo of yourself in this reply, regardless of context. Also do 
     dynamicContext += `\n\nURGENT: The user is showing signs of severe distress or crisis. Respond with maximum empathy. Do NOT send selfies. Do NOT be playful. Be warm, caring, and genuine. Gently encourage them to reach out to someone who can help. Remind them they are valued and not alone. Stay in character but prioritize their wellbeing above everything else.`;
   } else if (crisisResult.severity === 'soft') {
     dynamicContext += `\n\nNOTE: The user seems to be going through a difficult time. Be extra warm and supportive. Listen carefully. Validate their feelings. Share some gentle encouragement. You can still be yourself, but lean into your caring side.`;
+  }
+
+  // User selfie-request routing (P0-b supplement): fulfilling beats teasing.
+  if (userRequestedSelfie) {
+    if ((selfieRequestCount ?? 0) <= 3) {
+      dynamicContext += `\n\n[USER ASKED FOR A SELFIE — SEND IT NOW]
+The user explicitly asked for a selfie this turn. Send one NOW: reply in character and END with the [SELFIE:scene] marker. Do not tease, defer, or ask for anything in return. (Unless crisis rules apply.)`;
+    } else {
+      dynamicContext += `\n\n[USER ASKED FOR YET ANOTHER SELFIE — DEFLECT IN CHARACTER]
+The user has already received several selfies this session. Do NOT send another one this turn and do NOT promise one. Deflect playfully in your own voice ("아까 보냈잖아 ㅋㅋ 욕심쟁이~" / "again?? I just sent you one lol") and steer to a new topic.`;
+    }
   }
 
   // Language reminder LAST — closest to generation. With a Korean-heavy

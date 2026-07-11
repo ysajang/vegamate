@@ -10,6 +10,8 @@ import { getCharacterScenes } from '@/lib/chat/selfie-context';
 import { generateAIResponseStream } from '@/lib/chat/ai-service';
 import { resolveResponseLanguage } from '@/lib/chat/language-directive';
 import { resolveAllowedTiers } from '@/lib/chat/selfie-tier';
+import { detectUserSelfieRequest } from '@/lib/chat/selfie-promise';
+import { isDirectRequestTurn } from '@/lib/chat/beg-line';
 import {
   detectExplicitPhotoRequest,
   teaserQuotaAvailable,
@@ -210,6 +212,16 @@ async function handler(req: NextRequest) {
   // explicit "ONLY in {language}" rule so English users never get Korean
   // sentences/ㅋㅋ leaks (prod bug, meta ads round 1). A user who writes in
   // Korean still resolves to ko — Korean replies to Korean users are correct.
+  // P0-b supplement: the user's explicit selfie ask is the robust marker
+  // signal. NSFW-explicit asks route to the blur teaser instead (never both).
+  const userRequestedSelfie =
+    detectUserSelfieRequest(content) && !detectExplicitPhotoRequest(content);
+  // Session request count = matching user turns in the loaded history window
+  // + this one. Drives the 3-per-session cap (4th+ resumes the guard).
+  const selfieRequestCount = userRequestedSelfie
+    ? history.filter((m) => m.role === 'user' && detectUserSelfieRequest(m.content)).length + 1
+    : 0;
+
   const responseLanguage = resolveResponseLanguage(
     history,
     content,
@@ -279,9 +291,13 @@ async function handler(req: NextRequest) {
             memoryContext,
             messageCount: conversation.message_count,
             heartsRemaining,
-            giftNudge: balanceState.nudge,
+            // Fulfilment beats begging: a direct selfie-request turn never
+            // carries the gift-nudge directive (prod hijack, 2026-07-11).
+            giftNudge: userRequestedSelfie ? 'none' : balanceState.nudge,
             intimacyStage: conversation.intimacy_stage ?? 0,
             responseLanguage,
+            userRequestedSelfie,
+            selfieRequestCount,
           },
           (text) => send({ t: 'delta', v: text })
         );
@@ -384,6 +400,7 @@ async function handler(req: NextRequest) {
     // The beg is appended AFTER all LLM-side language enforcement — this is
     // its only language guard (prod: Korean beg sent to an English user).
     language: responseLanguage,
+    isDirectRequestTurn: isDirectRequestTurn(content),
   });
 
   // 12.pre — Blur teaser (round 1.5): explicit photo request + no premium
