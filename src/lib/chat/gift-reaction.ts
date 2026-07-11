@@ -16,6 +16,7 @@
  * purely relational.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { thankYouTierForAmount } from './selfie-tier';
 
 /** Per-character, per-gift reaction lines (Korean). Picked at random. */
 const KO_REACTIONS: Record<string, Record<string, string[]>> = {
@@ -233,7 +234,7 @@ export async function sendGiftReaction(
   }
 
   const [{ data: gift }, { data: character }, { data: conv }, { data: profile }] = await Promise.all([
-    serviceClient.from('gifts').select('slug, name, emoji').eq('id', tx.gift_id).single(),
+    serviceClient.from('gifts').select('slug, name, emoji, price_usd').eq('id', tx.gift_id).single(),
     serviceClient.from('characters').select('id, slug, name').eq('id', tx.character_id).single(),
     serviceClient
       .from('conversations')
@@ -254,11 +255,56 @@ export async function sendGiftReaction(
   const lang = profile?.preferred_language === 'ko' ? 'ko' : 'en';
   const content = pickReaction(character.slug || 'default', gift.slug, lang);
 
-  // 3. Best-effort selfie: only when the character's pre-generated pool has a
-  // scene matching this gift. Natural sparsity keeps selfies scarce/special.
+  // 3. Selfie attach — two paths, premium first:
+  //    (P) $4.99+ gift → ONE premium thank-you selfie from the tier the price
+  //        earns (4.99+→b / 9.99+→a / 14.99+→s). This is the gift-reward loop
+  //        made real (round 1.5); idempotency = this function's per-tx guard.
+  //        Characters without a premium pool (everyone but miku today) fall
+  //        through silently to (F).
+  //    (F) Best-effort free selfie when the pool has a scene matching the
+  //        gift — the pre-existing behavior, unchanged.
   let selfieId: string | null = null;
   let selfieRarity: string | null = null;
-  if (GIFT_SCENE_HINTS[gift.slug]) {
+  let selfieTier: string | null = null;
+
+  const rewardTier = thankYouTierForAmount(
+    gift.price_usd == null ? null : Number(gift.price_usd)
+  );
+  if (rewardTier) {
+    try {
+      const { data: premiumId } = await serviceClient.rpc('pick_selfie_by_scene', {
+        p_character_id: character.id,
+        p_user_id: tx.user_id,
+        p_scene: null,
+        p_allowed_tiers: [rewardTier],
+      });
+      if (premiumId) {
+        const { data: selfie } = await serviceClient
+          .from('selfie_pool')
+          .select('id, rarity, tier')
+          .eq('id', premiumId as string)
+          .single();
+        if (selfie) {
+          selfieId = selfie.id;
+          selfieRarity = selfie.rarity;
+          selfieTier = (selfie as { tier?: string }).tier ?? rewardTier;
+          await serviceClient.from('user_selfie_collection').upsert(
+            {
+              user_id: tx.user_id,
+              selfie_id: selfie.id,
+              character_id: character.id,
+              rarity: selfie.rarity,
+            },
+            { onConflict: 'user_id,selfie_id' }
+          );
+        }
+      }
+    } catch (err) {
+      console.warn('[GiftReaction] Premium thank-you pick failed (non-critical):', err);
+    }
+  }
+
+  if (!selfieId && GIFT_SCENE_HINTS[gift.slug]) {
     try {
       const { data: pool } = await serviceClient
         .from('selfie_pool')
@@ -321,6 +367,10 @@ export async function sendGiftReaction(
   if (selfieId) {
     insert.selfie_id = selfieId;
     insert.selfie_rarity = selfieRarity;
+    if (selfieTier && selfieTier !== 'free') {
+      // Surfaces the tier badge on the selfie card (minimal UI, round 1.5).
+      (insert.metadata as Record<string, unknown>).selfie_tier = selfieTier;
+    }
   }
 
   const { error: msgError } = await serviceClient.from('messages').insert(insert);

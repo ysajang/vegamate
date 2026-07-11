@@ -35,6 +35,9 @@ function SelfieInline({ selfie }: SelfieInlineProps) {
 
   const border = getRarityBorder(selfie.rarity);
   const animation = getRarityAnimation(selfie.rarity);
+  // Round 1.5: premium selfies show a small unlock badge. Reuses this card —
+  // no new screens.
+  const isPremium = Boolean(selfie.tier && selfie.tier !== 'free');
 
   if (expanded) {
     return (
@@ -86,6 +89,16 @@ function SelfieInline({ selfie }: SelfieInlineProps) {
             background: 'var(--vm-card)',
           }}
         />
+      )}
+
+      {isPremium && (
+        <div
+          className="absolute right-1.5 top-1.5 z-10 flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
+          style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}
+        >
+          <span aria-hidden>🔓</span>
+          <span>Special</span>
+        </div>
       )}
 
       <Image

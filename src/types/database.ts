@@ -61,6 +61,8 @@ export interface DbSelfie {
   trigger_contexts: SelfieTriggerType[];
   is_active: boolean;
   created_at: string;
+  /** 'free' | 'premium_b' | 'premium_a' | 'premium_s' — optional until the tier migration is applied. */
+  tier?: string;
 }
 
 export interface DbConversation {

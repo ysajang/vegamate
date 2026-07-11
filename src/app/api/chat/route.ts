@@ -9,6 +9,7 @@ import { evaluateSelfieGuard } from '@/lib/chat/selfie-trigger';
 import { getCharacterScenes } from '@/lib/chat/selfie-context';
 import { generateAIResponseStream } from '@/lib/chat/ai-service';
 import { resolveResponseLanguage } from '@/lib/chat/language-directive';
+import { resolveAllowedTiers } from '@/lib/chat/selfie-tier';
 import { encodeStreamEvent, type StreamEvent } from '@/lib/chat/stream-protocol';
 import {
   fetchUserMemories,
@@ -286,10 +287,18 @@ async function handler(req: NextRequest) {
   let selfieData: DbSelfie | null = null;
 
   if (willSendSelfie) {
+    // Tier gating: the pick may only draw from tiers this user can access
+    // (Lover subscription and/or max intimacy). Inaccessible tiers are simply
+    // absent from the pool — no error, free behavior unchanged (default free).
+    const allowedTiers = resolveAllowedTiers({
+      hasActiveLover: isSubscriber,
+      intimacyStage: conversation.intimacy_stage ?? 0,
+    });
     const { data: selfieIdResult } = await serviceClient.rpc('pick_selfie_by_scene', {
       p_character_id: character.id,
       p_user_id: user.id,
       p_scene: aiResult.selfieScene,
+      p_allowed_tiers: allowedTiers,
     });
 
     const selfieId = selfieIdResult as string | null;
