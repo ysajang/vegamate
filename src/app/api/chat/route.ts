@@ -216,11 +216,13 @@ async function handler(req: NextRequest) {
   // signal. NSFW-explicit asks route to the blur teaser instead (never both).
   const userRequestedSelfie =
     detectUserSelfieRequest(content) && !detectExplicitPhotoRequest(content);
-  // Session request count = matching user turns in the loaded history window
-  // + this one. Drives the 3-per-session cap (4th+ resumes the guard).
-  const selfieRequestCount = userRequestedSelfie
-    ? history.filter((m) => m.role === 'user' && detectUserSelfieRequest(m.content)).length + 1
-    : 0;
+  // Cap counts DELIVERIES, not asks (prod 2026-07-12: unfulfilled pre-deploy
+  // asks were counted, so the AI deflected with '아까 보냈잖아' while the user
+  // had received zero selfies). An ask forces a send until 3 selfies actually
+  // landed this session.
+  const selfiesDelivered = history.filter(
+    (m) => m.role === 'assistant' && Boolean((m as { selfie_id?: string | null }).selfie_id)
+  ).length;
 
   const responseLanguage = resolveResponseLanguage(
     history,
@@ -297,7 +299,7 @@ async function handler(req: NextRequest) {
             intimacyStage: conversation.intimacy_stage ?? 0,
             responseLanguage,
             userRequestedSelfie,
-            selfieRequestCount,
+            selfiesDelivered,
           },
           (text) => send({ t: 'delta', v: text })
         );

@@ -65,8 +65,8 @@ interface GenerateResponseParams {
   responseLanguage?: string;
   /** The user explicitly asked for a selfie this turn (route-detected). */
   userRequestedSelfie?: boolean;
-  /** User selfie requests this session, including this one. */
-  selfieRequestCount?: number;
+  /** Selfies actually delivered this session (assistant messages carrying one). */
+  selfiesDelivered?: number;
 }
 
 interface GenerateResponseResult {
@@ -144,7 +144,7 @@ export async function generateAIResponse(
       isCrisis: crisisSeverity !== 'none',
       availableScenes: params.availableScenes ?? [],
       userRequestedSelfie: params.userRequestedSelfie ?? false,
-      selfieRequestCount: params.selfieRequestCount ?? 0,
+      selfiesDelivered: params.selfiesDelivered ?? 0,
     }),
     tokensUsed,
     responseTimeMs: Date.now() - startTime,
@@ -262,7 +262,7 @@ export async function generateAIResponseStream(
       isCrisis: crisisSeverity !== 'none',
       availableScenes: params.availableScenes ?? [],
       userRequestedSelfie: params.userRequestedSelfie ?? false,
-      selfieRequestCount: params.selfieRequestCount ?? 0,
+      selfiesDelivered: params.selfiesDelivered ?? 0,
     }),
     tokensUsed,
     responseTimeMs: Date.now() - startTime,
@@ -303,7 +303,7 @@ function finalizeResponse(
     isCrisis: boolean;
     availableScenes: string[];
     userRequestedSelfie?: boolean;
-    selfieRequestCount?: number;
+    selfiesDelivered?: number;
   }
 ): Pick<
   GenerateResponseResult,
@@ -320,7 +320,7 @@ function finalizeResponse(
     isCrisis: opts.isCrisis,
     availableScenes: opts.availableScenes,
     userRequestedSelfie: opts.userRequestedSelfie ?? false,
-    selfieRequestCount: opts.selfieRequestCount ?? 0,
+    selfiesDelivered: opts.selfiesDelivered ?? 0,
   });
 
   return {
@@ -345,7 +345,7 @@ interface PromptPayload {
  * context, and prompt caching.
  */
 function buildPromptPayload(params: GenerateResponseParams): PromptPayload {
-  const { character, history, userMessage, selfieAllowed, availableScenes, memoryContext, messageCount, heartsRemaining, giftNudge, intimacyStage, responseLanguage, userRequestedSelfie, selfieRequestCount } = params;
+  const { character, history, userMessage, selfieAllowed, availableScenes, memoryContext, messageCount, heartsRemaining, giftNudge, intimacyStage, responseLanguage, userRequestedSelfie, selfiesDelivered } = params;
 
   // Crisis detection (keyword-based first pass — model provides second pass).
   // Pass recent user messages so a dangerous follow-up right after a strong
@@ -503,7 +503,7 @@ Do not send any photo of yourself in this reply, regardless of context. Also do 
 
   // User selfie-request routing (P0-b supplement): fulfilling beats teasing.
   if (userRequestedSelfie) {
-    if ((selfieRequestCount ?? 0) <= 3) {
+    if ((selfiesDelivered ?? 0) < 3) {
       dynamicContext += `\n\n[USER ASKED FOR A SELFIE — SEND IT NOW]
 The user explicitly asked for a selfie this turn. Send one NOW: reply in character and END with the [SELFIE:scene] marker. Do not tease, defer, or ask for anything in return. (Unless crisis rules apply.)`;
     } else {

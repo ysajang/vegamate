@@ -23,9 +23,12 @@
  *      (a silently-swallowed promise reproduces the exact churn bug).
  */
 
-/** Requests 1..N this many per session are honored past the guard; beyond it
- *  the frequency guard resumes (no infinite selfies — the AI deflects
- *  in character instead: "아까 보냈잖아 ㅋㅋ"). */
+/** A user's explicit ask forces a send until this many selfies were ACTUALLY
+ *  DELIVERED this session; then the guard resumes (anti-farm) and the AI
+ *  deflects in character ("아까 보냈잖아 ㅋㅋ"). Counting DELIVERIES, not asks:
+ *  prod 2026-07-12 — pre-deploy unfulfilled asks were counted, so the 3rd
+ *  ask hit the deflect branch and the AI claimed "아까 보냈잖아" while the
+ *  user had received exactly zero selfies. */
 export const USER_REQUEST_SESSION_CAP = 3;
 
 export interface SelfieDecisionInput {
@@ -43,8 +46,8 @@ export interface SelfieDecisionInput {
   availableScenes: string[];
   /** The USER explicitly asked for a selfie this turn (detectUserSelfieRequest). */
   userRequestedSelfie?: boolean;
-  /** How many user selfie requests this session INCLUDING this one. */
-  selfieRequestCount?: number;
+  /** Selfies ACTUALLY DELIVERED this session (assistant messages carrying one). */
+  selfiesDelivered?: number;
 }
 
 export interface SelfieDecision {
@@ -171,17 +174,17 @@ export function resolveSelfieDecision(input: SelfieDecisionInput): SelfieDecisio
     isCrisis,
     availableScenes,
     userRequestedSelfie = false,
-    selfieRequestCount = 0,
+    selfiesDelivered = 0,
   } = input;
 
   // Safety first: crisis turns never carry photos, whatever the model said.
   if (isCrisis) return { sendSelfie: false, scene: null };
 
   const promised = detectSelfiePromise(cleanContent);
-  // User's explicit ask beats the frequency guard — but only up to the
-  // session cap; the 4th+ request falls back to the guard (anti-farm).
+  // User's explicit ask beats the frequency guard — until the session has
+  // actually DELIVERED the cap; then the guard resumes (anti-farm).
   const userForce =
-    userRequestedSelfie && selfieRequestCount <= USER_REQUEST_SESSION_CAP;
+    userRequestedSelfie && selfiesDelivered < USER_REQUEST_SESSION_CAP;
 
   if (hasMarker) {
     // Guard-permitted marker, a visible promise the user already read, or an

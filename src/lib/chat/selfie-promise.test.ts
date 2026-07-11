@@ -191,15 +191,22 @@ describe('resolveSelfieDecision — user request forcing + session cap', () => {
     markerScene: null,
   };
 
-  it('explicit user request forces the marker even past the guard (requests 1-3)', () => {
-    for (const n of [1, 2, 3]) {
-      const d = resolveSelfieDecision({ ...base, userRequestedSelfie: true, selfieRequestCount: n });
+  it('explicit user request forces the marker while fewer than 3 selfies were DELIVERED', () => {
+    for (const delivered of [0, 1, 2]) {
+      const d = resolveSelfieDecision({ ...base, userRequestedSelfie: true, selfiesDelivered: delivered });
       expect(d.sendSelfie).toBe(true);
     }
   });
 
-  it('4th+ request in a session: guard resumes (no infinite selfies)', () => {
-    const d = resolveSelfieDecision({ ...base, userRequestedSelfie: true, selfieRequestCount: 4 });
+  it('PROD REGRESSION (2026-07-12): unfulfilled past ASKS must not count — 4th ask with 0 deliveries still sends', () => {
+    // Pre-deploy asks were never fulfilled; counting asks made the AI deflect
+    // with "아까 보냈잖아" while the user had received zero selfies.
+    const d = resolveSelfieDecision({ ...base, userRequestedSelfie: true, selfiesDelivered: 0 });
+    expect(d.sendSelfie).toBe(true);
+  });
+
+  it('3 selfies already delivered: guard resumes (no infinite selfies)', () => {
+    const d = resolveSelfieDecision({ ...base, userRequestedSelfie: true, selfiesDelivered: 3 });
     expect(d.sendSelfie).toBe(false);
   });
 
@@ -208,7 +215,7 @@ describe('resolveSelfieDecision — user request forcing + session cap', () => {
       ...base,
       isCrisis: true,
       userRequestedSelfie: true,
-      selfieRequestCount: 1,
+      selfiesDelivered: 0,
     });
     expect(d.sendSelfie).toBe(false);
   });
@@ -218,7 +225,7 @@ describe('resolveSelfieDecision — user request forcing + session cap', () => {
       ...base,
       cleanContent: 'anyway how was your day?',
       userRequestedSelfie: false,
-      selfieRequestCount: 0,
+      selfiesDelivered: 0,
     });
     expect(d.sendSelfie).toBe(false);
   });
