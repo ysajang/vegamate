@@ -23,6 +23,11 @@
  *      (a silently-swallowed promise reproduces the exact churn bug).
  */
 
+/** Requests 1..N this many per session are honored past the guard; beyond it
+ *  the frequency guard resumes (no infinite selfies — the AI deflects
+ *  in character instead: "아까 보냈잖아 ㅋㅋ"). */
+export const USER_REQUEST_SESSION_CAP = 3;
+
 export interface SelfieDecisionInput {
   /** Visible reply text with any [SELFIE] marker already stripped. */
   cleanContent: string;
@@ -36,6 +41,10 @@ export interface SelfieDecisionInput {
   isCrisis: boolean;
   /** Scene tokens that actually have images for this character. */
   availableScenes: string[];
+  /** The USER explicitly asked for a selfie this turn (detectUserSelfieRequest). */
+  userRequestedSelfie?: boolean;
+  /** How many user selfie requests this session INCLUDING this one. */
+  selfieRequestCount?: number;
 }
 
 export interface SelfieDecision {
@@ -63,7 +72,30 @@ const PROMISE_PATTERNS: RegExp[] = [
   new RegExp(String.raw`(?:셀카|사진|셀피)[^.!?\n]{0,25}(?:보내|보여|찍)`),
   // Korean verb-first: "보내줄게 ... 셀카/사진"
   new RegExp(String.raw`(?:보내|보여|찍)[^.!?\n]{0,25}(?:셀카|사진|셀피)`),
+  // Korean NOUN-LESS promises (prod 2026-07-11 miss: "몰래 찍은 거야 너한테만
+  // 보내는 거니까" / "잠깐만, 찍을게" — no 셀카/사진 noun in the sentence):
+  /(?:보여\s*줄게|보내\s*줄게|보내는\s*거|찍어\s*줄게|찍을게|찍어서\s*보내)/,
+  new RegExp(String.raw`잠깐만[^.!?\n]{0,20}(?:셀카|사진|찍)`),
 ];
+
+/**
+ * USER-side explicit selfie request (the robust P0-b signal — AI-promise
+ * wording mutates endlessly; the user's ask doesn't). Minimal ko/en set per
+ * the directive; no typo normalization ("셀까") by design.
+ */
+const USER_REQUEST_NOUN = /(셀카|셀피|사진|selfie|photo|pic(?:ture)?s?)/i;
+const USER_REQUEST_VERB = /(보여|보내|줘|주라|달라|send|show|see)/i;
+
+export function detectUserSelfieRequest(text: string): boolean {
+  if (!text) return false;
+  const sentences = text.split(/[.!?\n]+/);
+  for (const raw of sentences) {
+    const sentence = raw.trim();
+    if (!sentence) continue;
+    if (USER_REQUEST_NOUN.test(sentence) && USER_REQUEST_VERB.test(sentence)) return true;
+  }
+  return false;
+}
 
 /** Negation/refusal wording that disarms a match within the same sentence. */
 const NEGATION_PATTERNS: RegExp[] = [
@@ -131,26 +163,40 @@ export function matchSceneFromText(
  * Final send-or-not decision for this turn. Pure; the route/service applies it.
  */
 export function resolveSelfieDecision(input: SelfieDecisionInput): SelfieDecision {
-  const { cleanContent, hasMarker, markerScene, selfieAllowed, isCrisis, availableScenes } = input;
+  const {
+    cleanContent,
+    hasMarker,
+    markerScene,
+    selfieAllowed,
+    isCrisis,
+    availableScenes,
+    userRequestedSelfie = false,
+    selfieRequestCount = 0,
+  } = input;
 
   // Safety first: crisis turns never carry photos, whatever the model said.
   if (isCrisis) return { sendSelfie: false, scene: null };
 
   const promised = detectSelfiePromise(cleanContent);
+  // User's explicit ask beats the frequency guard — but only up to the
+  // session cap; the 4th+ request falls back to the guard (anti-farm).
+  const userForce =
+    userRequestedSelfie && selfieRequestCount <= USER_REQUEST_SESSION_CAP;
 
   if (hasMarker) {
-    // Guard-permitted marker, or a visible promise the user already read —
-    // both must deliver. A stray marker with no visible promise while the
-    // guard blocked the turn is safely stripped (nothing was promised).
-    if (selfieAllowed || promised) {
+    // Guard-permitted marker, a visible promise the user already read, or an
+    // explicit user ask — all must deliver. A stray marker with none of those
+    // while the guard blocked the turn is safely stripped.
+    if (selfieAllowed || promised || userForce) {
       return { sendSelfie: true, scene: markerScene };
     }
     return { sendSelfie: false, scene: null };
   }
 
-  // No marker: deterministic correction — a visible promise must be honored
-  // (even when the guard blocked the turn; the promise is already on screen).
-  if (promised) {
+  // No marker: deterministic correction — a visible promise OR an explicit
+  // user ask must be honored (prod 2026-07-11: the AI's noun-less Korean
+  // promise slipped every text pattern; the user's ask is the robust signal).
+  if (promised || userForce) {
     return { sendSelfie: true, scene: matchSceneFromText(cleanContent, availableScenes) };
   }
 

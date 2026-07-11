@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   detectSelfiePromise,
+  detectUserSelfieRequest,
   matchSceneFromText,
   resolveSelfieDecision,
 } from './selfie-promise';
@@ -141,6 +142,83 @@ describe('resolveSelfieDecision — promise↔marker consistency (deterministic 
       cleanContent: 'anyway how was your day?',
       hasMarker: true,
       markerScene: 'cafe',
+    });
+    expect(d.sendSelfie).toBe(false);
+  });
+});
+
+describe('detectUserSelfieRequest — user-side explicit request (P0-b supplement)', () => {
+  // Prod 2026-07-11 (ko user 191bf607): "너 셀카 보여줘" ×3 — AI promised in
+  // noun-less Korean ("몰래 찍은 거야 너한테만 보내는 거니까") that the
+  // noun-required promise patterns missed. The user's own request is the
+  // robust signal; AI-promise detection stays as the secondary layer.
+  it('fires on Korean explicit requests', () => {
+    expect(detectUserSelfieRequest('너 셀카 보여줘')).toBe(true);
+    expect(detectUserSelfieRequest('셀카 보여달라고')).toBe(true);
+    expect(detectUserSelfieRequest('사진 하나만 보내줘')).toBe(true);
+    expect(detectUserSelfieRequest('셀카 좀 주라')).toBe(true);
+  });
+
+  it('fires on English explicit requests (regression)', () => {
+    expect(detectUserSelfieRequest('show me a selfie')).toBe(true);
+    expect(detectUserSelfieRequest('send me a pic')).toBe(true);
+    expect(detectUserSelfieRequest('can I see a photo of you')).toBe(true);
+  });
+
+  it('does NOT fire without a request verb or photo noun', () => {
+    expect(detectUserSelfieRequest('그 사진 진짜 웃겼어')).toBe(false);
+    expect(detectUserSelfieRequest('오늘 뭐해?')).toBe(false);
+    expect(detectUserSelfieRequest('show me how you dance')).toBe(false);
+  });
+});
+
+describe('AI promise detection — noun-less Korean promises (prod miss)', () => {
+  it('fires on the exact prod lines that slipped through', () => {
+    expect(detectSelfiePromise('대기실에서 몰래 찍은 거야 너한테만 보내는 거니까 비밀이야')).toBe(true);
+    expect(detectSelfiePromise('ㅋㅋ 알겠어 잠깐만, 셀카 찍을게')).toBe(true);
+    expect(detectSelfiePromise('알겠어 보여줄게')).toBe(true);
+    expect(detectSelfiePromise('지금 찍어줄게 기다려')).toBe(true);
+  });
+});
+
+describe('resolveSelfieDecision — user request forcing + session cap', () => {
+  const base = {
+    selfieAllowed: false, // frequency guard blocked — user request must win
+    isCrisis: false,
+    availableScenes: ['cafe', 'dressing_room'],
+    cleanContent: 'ㅋㅋ 알겠어 잠깐만',
+    hasMarker: false,
+    markerScene: null,
+  };
+
+  it('explicit user request forces the marker even past the guard (requests 1-3)', () => {
+    for (const n of [1, 2, 3]) {
+      const d = resolveSelfieDecision({ ...base, userRequestedSelfie: true, selfieRequestCount: n });
+      expect(d.sendSelfie).toBe(true);
+    }
+  });
+
+  it('4th+ request in a session: guard resumes (no infinite selfies)', () => {
+    const d = resolveSelfieDecision({ ...base, userRequestedSelfie: true, selfieRequestCount: 4 });
+    expect(d.sendSelfie).toBe(false);
+  });
+
+  it('crisis still wins over an explicit request', () => {
+    const d = resolveSelfieDecision({
+      ...base,
+      isCrisis: true,
+      userRequestedSelfie: true,
+      selfieRequestCount: 1,
+    });
+    expect(d.sendSelfie).toBe(false);
+  });
+
+  it('no user request + no promise + guard blocked → unchanged (no send)', () => {
+    const d = resolveSelfieDecision({
+      ...base,
+      cleanContent: 'anyway how was your day?',
+      userRequestedSelfie: false,
+      selfieRequestCount: 0,
     });
     expect(d.sendSelfie).toBe(false);
   });
