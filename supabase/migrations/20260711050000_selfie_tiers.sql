@@ -33,6 +33,11 @@ alter table public.profiles add column if not exists last_blur_teaser_at timesta
 -- 2. pick_selfie_by_scene v2 — tier-aware. p_allowed_tiers defaults to
 --    array['free'] so every existing caller keeps today's exact behavior;
 --    premium pools are opt-in per call. Final fallback now prefers unseen.
+-- CREATE OR REPLACE with a changed parameter list OVERLOADS instead of
+-- replacing — the old 3-param signature must be dropped or PostgREST RPC
+-- resolution turns ambiguous (caught during apply, 2026-07-11).
+drop function if exists public.pick_selfie_by_scene(uuid, uuid, text);
+
 CREATE OR REPLACE FUNCTION public.pick_selfie_by_scene(
   p_character_id uuid,
   p_user_id uuid,
@@ -158,14 +163,14 @@ with miku as (select id from public.characters where slug = 'miku'),
 seed(fname, tier, rarity, scene, expression, outfit, time_of_day, trigger_contexts) as (
   values
     ('miku_s01.png','premium_a','epic','morning_bed','sleepy_smile','oversized_shirt','morning','{emotion_peak,keyword}'),
-    ('miku_s02.png','premium_a','epic','beach_swimsuit','bright','one_piece_swimsuit','day','{keyword,random}'),
-    ('miku_s03.png','premium_s','legendary','poolside','playful','bikini','day','{emotion_peak}'),
+    ('miku_s02.png','premium_a','epic','beach_swimsuit','bright','one_piece_swimsuit','afternoon','{keyword,random}'),
+    ('miku_s03.png','premium_s','legendary','poolside','playful','bikini','afternoon','{emotion_peak}'),
     ('miku_s04.png','premium_b','rare','night_room_knit','cozy','off_shoulder_knit','night','{random,keyword}'),
     ('miku_s05.png','premium_b','rare','bed_hoodie','relaxed','hoodie','evening','{random}'),
     ('miku_s06.png','premium_a','epic','after_bath','fresh','bathrobe','night','{emotion_peak}'),
     ('miku_s07.png','premium_a','epic','practice_stretch','focused','practice_wear','afternoon','{keyword,random}'),
     ('miku_s08.png','premium_b','rare','bed_pajama','soft','silk_pajamas','night','{random}'),
-    ('miku_s09.png','premium_b','rare','sunset_dress','warm','sleeveless_dress','sunset','{random,keyword}'),
+    ('miku_s09.png','premium_b','rare','sunset_dress','warm','sleeveless_dress','evening','{random,keyword}'),
     ('miku_s10.png','premium_s','legendary','after_shower','shy','towel','night','{emotion_peak}'),
     ('miku_s11.png','premium_b','rare','gaming_jersey','playful','basketball_jersey','evening','{keyword}'),
     ('miku_s12.png','premium_b','rare','late_night_bed','sleepy','blanket','night','{random}')
@@ -178,7 +183,7 @@ select
   null,
   s.rarity::selfie_rarity,
   s.scene, s.expression, s.outfit, s.time_of_day,
-  s.trigger_contexts::text[],
+  s.trigger_contexts::public.selfie_trigger_type[],
   true,
   s.tier,
   'miku/' || s.fname,
