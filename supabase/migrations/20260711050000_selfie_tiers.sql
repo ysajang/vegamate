@@ -11,6 +11,25 @@ alter table public.selfie_pool
 
 create index if not exists selfie_pool_tier_idx on public.selfie_pool (character_id, tier);
 
+-- Blur-teaser unlock (round 1.5 addendum):
+--   blurred_url  — public teaser image (server-side pre-generated gaussian,
+--                  medium strength; originals never reach the client blurred
+--                  via CSS — devtools would leak them)
+--   private_path — object path inside the PRIVATE bucket 'selfies-private';
+--                  originals were moved out of the public bucket. Premium
+--                  image_url points at the entitlement API which redirects to
+--                  a short-lived signed URL.
+alter table public.selfie_pool add column if not exists blurred_url text;
+alter table public.selfie_pool add column if not exists private_path text;
+
+-- A gift purchase can be bound to one specific blurred card; on webhook
+-- confirmation THAT selfie is unblurred (granted + sent). One card per tx.
+alter table public.gift_transactions
+  add column if not exists unblur_selfie_id uuid references public.selfie_pool(id);
+
+-- Blur-teaser frequency guard: max one teaser card per user per day.
+alter table public.profiles add column if not exists last_blur_teaser_at timestamptz;
+
 -- 2. pick_selfie_by_scene v2 — tier-aware. p_allowed_tiers defaults to
 --    array['free'] so every existing caller keeps today's exact behavior;
 --    premium pools are opt-in per call. Final fallback now prefers unseen.
@@ -152,21 +171,30 @@ seed(fname, tier, rarity, scene, expression, outfit, time_of_day, trigger_contex
     ('miku_s12.png','premium_b','rare','late_night_bed','sleepy','blanket','night','{random}')
 )
 insert into public.selfie_pool
-  (character_id, image_url, thumbnail_url, rarity, scene, expression, outfit, time_of_day, trigger_contexts, is_active, tier)
+  (character_id, image_url, thumbnail_url, rarity, scene, expression, outfit, time_of_day, trigger_contexts, is_active, tier, private_path, blurred_url)
 select
   miku.id,
-  'https://lkkssjroquawqkdiiuhm.supabase.co/storage/v1/object/public/selfies/staging/' || s.fname,
+  'pending', -- repointed to the entitlement API right below (needs the row id)
   null,
   s.rarity::selfie_rarity,
   s.scene, s.expression, s.outfit, s.time_of_day,
   s.trigger_contexts::text[],
   true,
-  s.tier
+  s.tier,
+  'miku/' || s.fname,
+  'https://lkkssjroquawqkdiiuhm.supabase.co/storage/v1/object/public/selfies/blurred/' || replace(s.fname, '.png', '.jpg')
 from seed s, miku
 where not exists (
   select 1 from public.selfie_pool sp
-  where sp.image_url like '%/staging/' || s.fname
+  where sp.private_path = 'miku/' || s.fname
 );
+
+-- Premium originals live behind the entitlement gate: /api/selfies/{id}/image
+-- checks auth + (owned-in-collection OR tier-accessible) and 302s to a fresh
+-- signed URL on the private bucket.
+update public.selfie_pool
+set image_url = '/api/selfies/' || id || '/image'
+where tier <> 'free' and image_url = 'pending';
 
 -- ============================================================================
 -- VERIFICATION (run after apply):
@@ -175,5 +203,7 @@ where not exists (
 --   select scene, tier, rarity from selfie_pool where tier <> 'free' order by tier, scene;
 --   select pg_get_function_arguments(oid) from pg_proc where proname='pick_selfie_by_scene';
 --     → ... p_allowed_tiers text[] DEFAULT ARRAY['free']
+--   select count(*) from selfie_pool where tier <> 'free' and (blurred_url is null or private_path is null or image_url not like '/api/selfies/%');
+--     → 0
 --   -- free-path regression: RPC without the new param must still return only free rows.
 -- ============================================================================
