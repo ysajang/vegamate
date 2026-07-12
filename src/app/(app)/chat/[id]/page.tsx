@@ -11,6 +11,7 @@ import { CharacterAvatar, TypingIndicator } from '@/components/common';
 import { GiftSheet } from '@/components/chat/gift-sheet';
 import { shouldReopenGiftSheet, GIFT_SHEET_REOPEN_COOLDOWN_MS } from '@/components/chat/gift-gate';
 import { UpgradePrompt } from '@/components/chat/upgrade-prompt';
+import { trackFunnelEvent } from '@/lib/analytics/funnel';
 import type { DbCharacter } from '@/types';
 
 interface ChatPageProps {
@@ -37,6 +38,19 @@ export default function ChatPage({ params }: ChatPageProps) {
   // restore the visual position afterward (no jump).
   const prependAnchorRef = useRef<number | null>(null);
   const router = useRouter();
+
+  // Funnel (Notion §34): chat room mounted.
+  useEffect(() => {
+    void trackFunnelEvent('chat_enter', { conversation_id: conversationId });
+  }, [conversationId]);
+
+  // Funnel (Notion §34): gift sheet opened. Single observation point covers
+  // every open path (locked-composer tap, auto-open timer, future triggers).
+  useEffect(() => {
+    if (giftSheetOpen) {
+      void trackFunnelEvent('gift_sheet_open', { conversation_id: conversationId });
+    }
+  }, [giftSheetOpen, conversationId]);
 
   const {
     messages,

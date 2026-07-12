@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
 import { CharacterAvatar, TypingIndicator } from '@/components/common';
 import { trackEvent } from '@/lib/analytics/meta-pixel';
+import { trackFunnelEvent } from '@/lib/analytics/funnel';
 import type { DbCharacter } from '@/types';
 import {
   resolveInitialOnboardingStep,
@@ -663,6 +664,7 @@ export default function OnboardingPage() {
       const json = await res.json();
       if (json.success) {
         trackEvent('CompleteRegistration');
+        void trackFunnelEvent('signup_complete', { path: 'resume' });
         router.push(`/chat/${json.data.conversation.id}`);
         return;
       }
@@ -710,6 +712,7 @@ export default function OnboardingPage() {
       if (json.success) {
         // Funnel: signup complete (onboarding finished → first chat).
         trackEvent('CompleteRegistration');
+        void trackFunnelEvent('signup_complete', { path: 'onboarding' });
         router.push(`/chat/${json.data.conversation.id}`);
         return;
       }

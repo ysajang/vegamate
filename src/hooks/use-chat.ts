@@ -6,6 +6,7 @@ import type { DbMessage } from '@/types';
 import { shouldGateInput } from './exhaustion-gate';
 import { StreamDecoder, type StreamEvent } from '@/lib/chat/stream-protocol';
 import { trackEvent } from '@/lib/analytics/meta-pixel';
+import { trackFunnelEvent } from '@/lib/analytics/funnel';
 
 /** Terminal `meta` payload from the chat stream (mirrors the old JSON body). */
 interface ChatMetaPayload {
@@ -357,6 +358,23 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
               }
             } catch {
               // sessionStorage may be unavailable (private mode) — ignore.
+            }
+            // Funnel (Notion §34): first user message accepted, one-shot per
+            // user. localStorage skips repeat inserts on this device; the DB
+            // partial unique index collapses multi-device duplicates.
+            try {
+              if (!localStorage.getItem('vm_funnel_first_msg')) {
+                localStorage.setItem('vm_funnel_first_msg', '1');
+                void trackFunnelEvent('first_message_sent', {
+                  conversation_id: conversationId,
+                });
+              }
+            } catch {
+              // Storage unavailable — still record the event; the DB unique
+              // index keeps it one row per user.
+              void trackFunnelEvent('first_message_sent', {
+                conversation_id: conversationId,
+              });
             }
             // Insert the streaming bubble once the first token arrives.
             const placeholder: DbMessage = {

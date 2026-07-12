@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import { Toaster } from '@/components/ui/sonner';
 import { Analytics } from '@vercel/analytics/next';
 import { PixelProvider } from '@/components/analytics/pixel-provider';
+import { UtmCapture } from '@/components/analytics/utm-capture';
 import './globals.css';
 
 const geistSans = Geist({
@@ -80,6 +81,7 @@ export default function RootLayout({
         {children}
         <Suspense fallback={null}>
           <PixelProvider />
+          <UtmCapture />
         </Suspense>
         <Toaster position="top-center" richColors closeButton />
         <Analytics />
