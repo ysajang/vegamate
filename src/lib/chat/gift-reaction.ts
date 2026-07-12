@@ -17,6 +17,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { thankYouTierForAmount } from './selfie-tier';
+import { resolveAutoUnblurCandidate } from './blur-teaser';
 
 /** Per-character, per-gift reaction lines (Korean). Picked at random. */
 const KO_REACTIONS: Record<string, Record<string, string[]>> = {
@@ -270,7 +271,55 @@ export async function sendGiftReaction(
   // (U) Unblur binding wins: the buyer paid to see ONE specific blurred card —
   //     deliver exactly that selfie (grant + unblurred send). Per-tx idempotency
   //     is the same message guard as everything else in this function.
-  const boundSelfieId = (tx as { unblur_selfie_id?: string | null }).unblur_selfie_id ?? null;
+  let boundSelfieId = (tx as { unblur_selfie_id?: string | null }).unblur_selfie_id ?? null;
+
+  // (U2) Unbound-purchase rescue (round 2): a $4.99+ purchase that did NOT go
+  //      through the teaser CTA (exhaustion sheet / locked-input sheet / an
+  //      older inline card) still auto-binds to the user's pending teaser —
+  //      the buyer just saw a blurred photo and paid a qualifying amount;
+  //      handing them a random premium instead of THE teased card is a
+  //      paid-but-locked trust break on the only payment rail. Non-fatal.
+  if (!boundSelfieId && gift.price_usd != null && Number(gift.price_usd) >= 4.98) {
+    try {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data: teaserMsgs } = await serviceClient
+        .from('messages')
+        .select('created_at, metadata')
+        .eq('conversation_id', conv.id)
+        .eq('role', 'assistant')
+        .gte('created_at', since)
+        .not('metadata->blur_teaser', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      const candidates = (teaserMsgs || [])
+        .map((m) => {
+          const meta = (m as { metadata?: { blur_teaser?: { selfie_id?: string } } }).metadata;
+          return {
+            selfieId: meta?.blur_teaser?.selfie_id ?? '',
+            createdAt: (m as { created_at: string }).created_at,
+          };
+        })
+        .filter((c) => c.selfieId);
+
+      if (candidates.length > 0) {
+        const { data: collectedRows } = await serviceClient
+          .from('user_selfie_collection')
+          .select('selfie_id')
+          .eq('user_id', tx.user_id)
+          .in(
+            'selfie_id',
+            candidates.map((c) => c.selfieId)
+          );
+        const collected = new Set(
+          (collectedRows || []).map((r) => (r as { selfie_id: string }).selfie_id)
+        );
+        boundSelfieId = resolveAutoUnblurCandidate(candidates, collected);
+      }
+    } catch (err) {
+      console.warn('[GiftReaction] Auto-unblur lookup failed (non-critical):', err);
+    }
+  }
   if (boundSelfieId) {
     try {
       const { data: selfie } = await serviceClient

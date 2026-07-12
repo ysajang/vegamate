@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   detectExplicitPhotoRequest,
+  resolveAutoUnblurCandidate,
   teaserQuotaAvailable,
   pickTeaserTier,
   TEASER_COPY,
@@ -72,5 +73,57 @@ describe('TEASER_COPY — payment-processor-safe wording (string audit)', () => 
     expect(BANNED_SALES_WORDS).toEqual(
       expect.arrayContaining(['sexy', 'hot', 'uncensored', 'nude', 'nsfw'])
     );
+  });
+});
+
+describe('resolveAutoUnblurCandidate — unbound $4.99+ purchase rescues the pending teaser', () => {
+  const now = new Date('2026-07-13T12:00:00Z');
+  const h = (hoursAgo: number) =>
+    new Date(now.getTime() - hoursAgo * 3600 * 1000).toISOString();
+
+  it('picks the most recent teaser within 24h', () => {
+    const id = resolveAutoUnblurCandidate(
+      [
+        { selfieId: 'old', createdAt: h(20) },
+        { selfieId: 'new', createdAt: h(2) },
+      ],
+      new Set(),
+      now
+    );
+    expect(id).toBe('new');
+  });
+
+  it('ignores teasers older than 24h (quota window)', () => {
+    const id = resolveAutoUnblurCandidate(
+      [{ selfieId: 'stale', createdAt: h(25) }],
+      new Set(),
+      now
+    );
+    expect(id).toBeNull();
+  });
+
+  it('skips already-collected (already unblurred) selfies', () => {
+    const id = resolveAutoUnblurCandidate(
+      [
+        { selfieId: 'unblurred', createdAt: h(1) },
+        { selfieId: 'pending', createdAt: h(3) },
+      ],
+      new Set(['unblurred']),
+      now
+    );
+    expect(id).toBe('pending');
+  });
+
+  it('empty input → null', () => {
+    expect(resolveAutoUnblurCandidate([], new Set(), now)).toBeNull();
+  });
+
+  it('invalid dates are skipped, not thrown', () => {
+    const id = resolveAutoUnblurCandidate(
+      [{ selfieId: 'bad', createdAt: 'not-a-date' }],
+      new Set(),
+      now
+    );
+    expect(id).toBeNull();
   });
 });

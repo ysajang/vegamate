@@ -82,3 +82,35 @@ export function pickTeaserTier(allowedTiers: readonly string[]): SelfieTier | nu
   }
   return null;
 }
+
+/** A blur-teaser card previously attached to a chat message. */
+export interface TeaserCandidate {
+  selfieId: string;
+  createdAt: string | Date;
+}
+
+/**
+ * Unbound-purchase rescue (round 2): a qualifying ($4.99+) gift purchase that
+ * arrived WITHOUT an explicit unblur binding (bought from the exhaustion
+ * sheet, the locked-input sheet, or an older inline card — anywhere but the
+ * teaser CTA) auto-binds to the user's pending teaser: the most recent teaser
+ * card within the 24h quota window whose selfie is not yet in the collection.
+ * Closes every paid-but-still-blurred path; the daily quota guarantees at
+ * most one pending candidate per window, so the pick is deterministic.
+ */
+export function resolveAutoUnblurCandidate(
+  candidates: readonly TeaserCandidate[],
+  collectedSelfieIds: ReadonlySet<string>,
+  now: Date = new Date()
+): string | null {
+  const windowMs = 24 * 60 * 60 * 1000;
+  let best: { selfieId: string; t: number } | null = null;
+  for (const c of candidates) {
+    if (!c.selfieId || collectedSelfieIds.has(c.selfieId)) continue;
+    const t = new Date(c.createdAt).getTime();
+    if (Number.isNaN(t)) continue;
+    if (now.getTime() - t > windowMs || t > now.getTime()) continue;
+    if (!best || t > best.t) best = { selfieId: c.selfieId, t };
+  }
+  return best?.selfieId ?? null;
+}
