@@ -129,6 +129,8 @@ export interface GiftSurfaceInput {
   isCrisis: boolean;
   /** Default slug to surface when zero-state but the model emitted no marker. */
   fallbackSlug?: string;
+  /** A blur-teaser card landed this turn — its CTA replaces the inline card. */
+  hasTeaser?: boolean;
 }
 
 export interface GiftSurface {
@@ -139,11 +141,18 @@ export interface GiftSurface {
 }
 
 export function resolveGiftSurface(input: GiftSurfaceInput): GiftSurface {
-  const { nudge, exhausted, parsedGiftSlug, isCrisis, fallbackSlug = 'coffee' } = input;
+  const { nudge, exhausted, parsedGiftSlug, isCrisis, fallbackSlug = 'coffee', hasTeaser = false } = input;
 
-  const giftSlug =
-    parsedGiftSlug ??
-    ((nudge === 'zero' || nudge === 'low') && !isCrisis ? fallbackSlug : null);
+  // Blur-teaser turn: the teaser card (CTA → $4.99+ gift sheet, purchase
+  // bound to the teased selfie) is the ONLY purchase surface this turn. A
+  // competing inline card (prod: Haiku emitted [GIFT:cake]/[GIFT:movie] on
+  // 2/2 explicit-refusal turns) undercuts the unblur floor and can produce a
+  // paid-but-still-blurred purchase. Gating (heartsExhausted) is a hearts-
+  // economy invariant and stays untouched.
+  const giftSlug = hasTeaser
+    ? null
+    : parsedGiftSlug ??
+      ((nudge === 'zero' || nudge === 'low') && !isCrisis ? fallbackSlug : null);
 
   const heartsExhausted = exhausted && !isCrisis;
 

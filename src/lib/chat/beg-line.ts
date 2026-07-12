@@ -122,6 +122,12 @@ export interface EnsureBegInput {
    */
   isDirectRequestTurn?: boolean;
   /**
+   * A blur-teaser card landed this turn. The reply is an in-character refusal
+   * paired with the teaser CTA — appending a hearts-beg would be incoherent
+   * and compete with the teaser's own purchase path.
+   */
+  hasTeaser?: boolean;
+  /**
    * Optional deterministic index picker (for tests). Defaults to random.
    * Receives the pool length, returns an index.
    */
@@ -141,10 +147,11 @@ export function isDirectRequestTurn(userMessage: string): boolean {
  * in which case a short persona-matched beg line is appended to the reply.
  */
 export function ensureBegLine(content: string, input: EnsureBegInput): string {
-  const { nudge, slug, isCrisis, aiBegged, language, pick, isDirectRequestTurn: direct } = input;
+  const { nudge, slug, isCrisis, aiBegged, language, pick, isDirectRequestTurn: direct, hasTeaser } = input;
 
   if (nudge === 'none') return content;
   if (isCrisis) return content;
+  if (hasTeaser) return content; // teaser CTA owns this turn's purchase path
   if (aiBegged) return content;
   if (direct) return content; // fulfil the request; beg in small-talk turns only
 

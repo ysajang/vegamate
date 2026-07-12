@@ -136,3 +136,45 @@ describe('resolveGiftSurface (route monetization branching)', () => {
     expect(s.heartsExhausted).toBe(false);
   });
 });
+
+describe('resolveGiftSurface — blur-teaser turn (round 2)', () => {
+  // Prod evidence (Joel, 2026-07-11): both explicit-photo refusal turns
+  // carried [GIFT] markers (cake, movie). Once the teaser ships, that turn
+  // would render TWO competing purchase CTAs — a cheap inline gift card next
+  // to the teaser's $4.99+ CTA — undercutting the unblur floor and inviting
+  // a paid-but-still-blurred trust break. The teaser card IS the purchase
+  // surface on its turn; the inline card must yield.
+  it('teaser turn: model [GIFT] marker is suppressed', () => {
+    const s = resolveGiftSurface({
+      nudge: 'none',
+      exhausted: false,
+      parsedGiftSlug: 'cake',
+      isCrisis: false,
+      hasTeaser: true,
+    });
+    expect(s.giftSlug).toBeNull();
+  });
+
+  it('teaser turn at ZERO: fallback card suppressed but input still gated', () => {
+    const s = resolveGiftSurface({
+      nudge: 'zero',
+      exhausted: true,
+      parsedGiftSlug: null,
+      isCrisis: false,
+      hasTeaser: true,
+    });
+    expect(s.giftSlug).toBeNull(); // teaser CTA replaces the card
+    expect(s.heartsExhausted).toBe(true); // hearts economy invariant untouched
+  });
+
+  it('no teaser: behavior unchanged (marker passes through)', () => {
+    const s = resolveGiftSurface({
+      nudge: 'low',
+      exhausted: false,
+      parsedGiftSlug: 'cake',
+      isCrisis: false,
+      hasTeaser: false,
+    });
+    expect(s.giftSlug).toBe('cake');
+  });
+});

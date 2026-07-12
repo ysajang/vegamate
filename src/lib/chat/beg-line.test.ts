@@ -153,3 +153,47 @@ describe('beg suppression on direct-request turns (hijack fix, 2026-07-11)', () 
     expect(isDirectRequestTurn('오늘 완전 피곤했어 ㅋㅋ')).toBe(false);
   });
 });
+
+describe('ensureBegLine — blur-teaser turn (round 2)', () => {
+  // On a teaser turn the visible reply is an in-character refusal paired with
+  // the blurred card. Appending a hearts-beg ("사줘~") to a refusal is
+  // incoherent and competes with the teaser CTA — suppress it.
+  it('teaser turn at LOW: no beg appended', () => {
+    const out = ensureBegLine('nope, not sending that lol', {
+      nudge: 'low',
+      slug: 'miku',
+      isCrisis: false,
+      aiBegged: false,
+      language: 'en',
+      hasTeaser: true,
+      pick: () => 0,
+    });
+    expect(out).toBe('nope, not sending that lol');
+  });
+
+  it('teaser turn at ZERO: no beg appended', () => {
+    const out = ensureBegLine('haha nice try', {
+      nudge: 'zero',
+      slug: 'miku',
+      isCrisis: false,
+      aiBegged: false,
+      language: 'en',
+      hasTeaser: true,
+      pick: () => 0,
+    });
+    expect(out).toBe('haha nice try');
+  });
+
+  it('no teaser: beg still guaranteed at zero (regression)', () => {
+    const out = ensureBegLine('hey', {
+      nudge: 'zero',
+      slug: 'miku',
+      isCrisis: false,
+      aiBegged: false,
+      language: 'en',
+      hasTeaser: false,
+      pick: () => 0,
+    });
+    expect(out).not.toBe('hey');
+  });
+});
