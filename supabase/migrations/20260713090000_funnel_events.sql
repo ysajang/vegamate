@@ -36,4 +36,8 @@ create policy funnel_events_insert_own on public.funnel_events
   with check (auth.uid() = user_id);
 
 revoke all on public.funnel_events from anon;
+-- Default privileges auto-grant ALL to authenticated on new tables in this
+-- project — narrow to insert-only (RLS already blocks reads/writes without
+-- policies; this is defense in depth).
+revoke all on public.funnel_events from authenticated;
 grant insert on public.funnel_events to authenticated;
