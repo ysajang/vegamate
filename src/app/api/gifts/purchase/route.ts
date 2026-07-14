@@ -5,6 +5,7 @@ import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { sanitizeString, isValidUUID } from '@/lib/validators';
 import { APP_CONFIG } from '@/config/constants';
 import { isPayPalActive } from '@/lib/payments/provider';
+import { minGiftUsdForTier } from '@/lib/chat/selfie-economy';
 import { getOrdersController } from '@/lib/payments/paypal/client';
 import {
   CheckoutPaymentIntent,
@@ -151,15 +152,21 @@ async function handler(req: NextRequest) {
     });
   }
 
-  // 6.5 Validate the unblur binding (best-effort; drop silently when invalid)
+  // 6.5 Validate the unblur binding (best-effort; drop silently when invalid).
+  // Selfie-economy pivot: free-tier blurred cards unlock from $1.99, premium
+  // tiers keep the $4.99 floor — the threshold follows the TARGET's tier.
   let unblurSelfieId: string | null = null;
-  if (unblurSelfieIdRaw && isValidUUID(unblurSelfieIdRaw) && Number(gift.price_usd) >= 4.98) {
+  if (unblurSelfieIdRaw && isValidUUID(unblurSelfieIdRaw)) {
     const { data: target } = await serviceClient
       .from('selfie_pool')
       .select('id, tier, character_id')
       .eq('id', unblurSelfieIdRaw)
       .single();
-    if (target && target.tier && target.tier !== 'free' && target.character_id === characterId) {
+    if (
+      target &&
+      target.character_id === characterId &&
+      Number(gift.price_usd) >= minGiftUsdForTier(target.tier) - 0.01
+    ) {
       unblurSelfieId = target.id;
     }
   }

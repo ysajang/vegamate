@@ -279,8 +279,9 @@ export async function sendGiftReaction(
   //      the buyer just saw a blurred photo and paid a qualifying amount;
   //      handing them a random premium instead of THE teased card is a
   //      paid-but-locked trust break on the only payment rail. Non-fatal.
-  if (!boundSelfieId && gift.price_usd != null && Number(gift.price_usd) >= 4.98) {
+  if (!boundSelfieId && gift.price_usd != null && Number(gift.price_usd) >= 1.98) {
     try {
+      const paid = Number(gift.price_usd);
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const { data: teaserMsgs } = await serviceClient
         .from('messages')
@@ -294,13 +295,21 @@ export async function sendGiftReaction(
 
       const candidates = (teaserMsgs || [])
         .map((m) => {
-          const meta = (m as { metadata?: { blur_teaser?: { selfie_id?: string } } }).metadata;
+          const meta = (
+            m as {
+              metadata?: { blur_teaser?: { selfie_id?: string; min_gift_usd?: number } };
+            }
+          ).metadata;
           return {
             selfieId: meta?.blur_teaser?.selfie_id ?? '',
             createdAt: (m as { created_at: string }).created_at,
+            // Cards priced above what was paid stay locked (per-card floor:
+            // free-tier $1.99, premium $4.99 — from the card's own metadata,
+            // defaulting to the premium floor for legacy cards without it).
+            minGiftUsd: meta?.blur_teaser?.min_gift_usd ?? 4.99,
           };
         })
-        .filter((c) => c.selfieId);
+        .filter((c) => c.selfieId && paid >= c.minGiftUsd - 0.01);
 
       if (candidates.length > 0) {
         const { data: collectedRows } = await serviceClient
