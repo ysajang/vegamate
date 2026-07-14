@@ -11,6 +11,7 @@ import { generateAIResponseStream } from '@/lib/chat/ai-service';
 import { resolveResponseLanguage } from '@/lib/chat/language-directive';
 import { resolveAllowedTiers } from '@/lib/chat/selfie-tier';
 import { detectUserSelfieRequest } from '@/lib/chat/selfie-promise';
+import { decideSelfieDelivery, minGiftUsdForTier, SELFIE_BLUR_COPY } from '@/lib/chat/selfie-economy';
 import { isDirectRequestTurn } from '@/lib/chat/beg-line';
 import {
   detectExplicitPhotoRequest,
@@ -221,7 +222,14 @@ async function handler(req: NextRequest) {
   // had received zero selfies). An ask forces a send until 3 selfies actually
   // landed this session.
   const selfiesDelivered = history.filter(
-    (m) => m.role === 'assistant' && Boolean((m as { selfie_id?: string | null }).selfie_id)
+    (m) =>
+      m.role === 'assistant' &&
+      (Boolean((m as { selfie_id?: string | null }).selfie_id) ||
+        // Selfie-economy pivot: a blurred card is a delivery too — otherwise
+        // repeated asks farm unlimited cards past the session cap.
+        Boolean(
+          (m as { metadata?: { blur_teaser?: unknown } | null }).metadata?.blur_teaser
+        ))
   ).length;
 
   const responseLanguage = resolveResponseLanguage(
@@ -313,10 +321,26 @@ async function handler(req: NextRequest) {
     intimacyStage: conversation.intimacy_stage ?? 0,
   });
 
-  let willSendSelfie = aiResult.sendSelfie && aiResult.crisisSeverity === 'none';
+  // Explicit-photo turns route to the blur teaser exclusively (10.5) — the
+  // normal selfie path must never satisfy an explicit ask, even if the model
+  // chose to send one.
+  let willSendSelfie =
+    aiResult.sendSelfie &&
+    aiResult.crisisSeverity === 'none' &&
+    !detectExplicitPhotoRequest(content);
 
   // 10. If the AI chose to send a selfie, pick one matching its scene
   let selfieData: DbSelfie | null = null;
+  // Blurred regular-selfie card (selfie-economy pivot) — same client shape as
+  // the explicit-request teaser, different copy and a $1.99 free-tier floor.
+  let selfieBlurCard: {
+    selfie_id: string;
+    blurred_url: string;
+    tier: string;
+    caption: string;
+    cta: string;
+    min_gift_usd: number;
+  } | null = null;
 
   if (willSendSelfie) {
     const { data: selfieIdResult } = await serviceClient.rpc('pick_selfie_by_scene', {
@@ -336,22 +360,61 @@ async function handler(req: NextRequest) {
         .single();
 
       if (selfie) {
-        selfieData = selfie as DbSelfie;
+        // Selfie-economy pivot (round 2): only the user's FIRST selfie ever
+        // lands unblurred — later selfies arrive as blurred cards a gift
+        // unlocks. Subscribers and already-owned selfies stay unblurred; a
+        // missing blur asset falls back to unblurred (backfill in progress).
+        const [colCountRes, ownedRes] = await Promise.all([
+          serviceClient
+            .from('user_selfie_collection')
+            .select('selfie_id', { count: 'exact', head: true })
+            .eq('user_id', user.id),
+          serviceClient
+            .from('user_selfie_collection')
+            .select('selfie_id')
+            .eq('user_id', user.id)
+            .eq('selfie_id', selfieId)
+            .maybeSingle(),
+        ]);
 
-        await serviceClient.from('user_selfie_collection').upsert(
-          {
-            user_id: user.id,
-            selfie_id: selfieId,
-            character_id: character.id,
-            rarity: selfie.rarity,
-          },
-          { onConflict: 'user_id,selfie_id' }
-        );
-
-        await serviceClient.rpc('increment_conversation_stats', {
-          p_conversation_id: conversationId,
-          p_is_selfie: true,
+        const delivery = decideSelfieDelivery({
+          isFirstSelfieEver: (colCountRes.count ?? 0) === 0,
+          isLoverSubscriber: isSubscriber,
+          alreadyOwned: Boolean(ownedRes.data),
+          blurredUrl: (selfie as { blurred_url?: string | null }).blurred_url ?? null,
         });
+
+        if (delivery === 'blurred') {
+          const tier = ((selfie as { tier?: string | null }).tier ?? 'free') as string;
+          const lang = SELFIE_BLUR_COPY[responseLanguage === 'ko' ? 'ko' : 'en'];
+          selfieBlurCard = {
+            selfie_id: (selfie as { id: string }).id,
+            blurred_url: (selfie as { blurred_url?: string }).blurred_url as string,
+            tier,
+            caption: lang.caption,
+            cta: lang.cta,
+            min_gift_usd: minGiftUsdForTier(tier),
+          };
+          // No collection entry, no selfie stat — nothing was unlocked yet.
+          willSendSelfie = false;
+        } else {
+          selfieData = selfie as DbSelfie;
+
+          await serviceClient.from('user_selfie_collection').upsert(
+            {
+              user_id: user.id,
+              selfie_id: selfieId,
+              character_id: character.id,
+              rarity: selfie.rarity,
+            },
+            { onConflict: 'user_id,selfie_id' }
+          );
+
+          await serviceClient.rpc('increment_conversation_stats', {
+            p_conversation_id: conversationId,
+            p_is_selfie: true,
+          });
+        }
       }
     } else {
       willSendSelfie = false;
@@ -427,7 +490,7 @@ async function handler(req: NextRequest) {
     parsedGiftSlug: giftMarker?.giftSlug ?? null,
     isCrisis: giftSuppressedByCrisis,
     fallbackSlug: pickRequestableGift(stageForGift),
-    hasTeaser: !!teaser,
+    hasTeaser: !!(teaser ?? selfieBlurCard),
   });
 
   // Anti-coffee-monotony: Haiku emits [GIFT:coffee] by reflex. If the reply
@@ -455,7 +518,7 @@ async function handler(req: NextRequest) {
     // its only language guard (prod: Korean beg sent to an English user).
     language: responseLanguage,
     isDirectRequestTurn: isDirectRequestTurn(content),
-    hasTeaser: !!teaser,
+    hasTeaser: !!(teaser ?? selfieBlurCard),
   });
 
   // 12. Save AI response message
@@ -481,7 +544,9 @@ async function handler(req: NextRequest) {
       trigger_type: willSendSelfie ? 'ai_contextual' : null,
       selfie_scene: willSendSelfie ? aiResult.selfieScene : null,
       gift_request: effectiveGiftSlug,
-      ...(teaser ? { blur_teaser: teaser } : {}),
+      // One blur card max per turn: explicit-request teaser wins (mutually
+      // exclusive by construction — explicit turns skip the selfie path).
+      ...((teaser ?? selfieBlurCard) ? { blur_teaser: teaser ?? selfieBlurCard } : {}),
     },
   };
 
