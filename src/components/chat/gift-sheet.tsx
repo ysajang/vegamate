@@ -44,6 +44,44 @@ export function GiftSheet({
   const [needsAgeVerify, setNeedsAgeVerify] = useState(false);
   /** Gift the user tried to buy before the age gate, retried after verify. */
   const [pendingSlug, setPendingSlug] = useState<string | null>(null);
+  const [loverLoading, setLoverLoading] = useState(false);
+
+  /**
+   * Lover upsell (selfie-economy pivot): the unblur moment is the highest
+   * photo-desire point — surface the subscription HERE instead of leaving it
+   * buried behind the 30-turn stage trigger. One quiet line, no dark pattern.
+   */
+  const handleLoverUpgrade = async () => {
+    if (loverLoading) return;
+    setLoverLoading(true);
+    setNotice(null);
+    try {
+      const res = await fetch('/api/subscriptions/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tier_slug: 'lover',
+          surface: 'unblur_sheet',
+          character_id: characterId,
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (json?.success && json.data?.checkout_url) {
+        // Same-tab (in-app browsers kill window.open — 0/30 captures).
+        window.location.assign(json.data.checkout_url);
+        return;
+      }
+      if (json?.success && json.data?.blocked && json.data.reason === 'age_gate') {
+        setNeedsAgeVerify(true);
+        return;
+      }
+      setNotice('Could not start the upgrade. Please try again.');
+    } catch {
+      setNotice('Network error. Please try again.');
+    } finally {
+      setLoverLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -249,6 +287,22 @@ export function GiftSheet({
             </button>
           ))}
         </div>
+
+        {/* Lover upsell — unblur mode only (photo-desire moment) */}
+        {unblurSelfieId && (
+          <button
+            onClick={handleLoverUpgrade}
+            disabled={loverLoading}
+            className="mt-4 w-full rounded-2xl px-4 py-3 text-center text-[12px] transition-all duration-150 active:scale-[0.98] disabled:opacity-50"
+            style={{
+              background: 'rgba(124, 58, 237, 0.10)',
+              border: '1px solid var(--vm-glass-border)',
+              color: 'var(--vm-text-secondary)',
+            }}
+          >
+            {loverLoading ? '...' : '💜 Lover: every photo, always yours — no waiting'}
+          </button>
+        )}
       </div>
     </>
   );
