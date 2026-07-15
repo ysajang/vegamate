@@ -16,6 +16,7 @@ import {
 } from '@/lib/chat/proactive-selfie';
 import { sendPushToUser, type PushPayload } from '@/lib/push';
 import type { DbCharacter, DbMessage, DbSelfie } from '@/types';
+import { decideSelfieDelivery, minGiftUsdForTier, SELFIE_BLUR_COPY } from '@/lib/chat/selfie-economy';
 
 // ── Helpers ─────────────────────────────────────────────────
 
@@ -420,17 +421,75 @@ export async function GET(req: NextRequest) {
         }
 
         let selfieData: DbSelfie | null = null;
+        // Blurred proactive card (selfie-economy pivot): the proactive path
+        // bypassed the delivery decision and kept mailing free unblurred
+        // selfies, which would hollow out the blur economy — and a blurred
+        // card is the stronger comeback hook anyway (return to unlock).
+        let proactiveBlurCard: {
+          selfie_id: string;
+          blurred_url: string;
+          tier: string;
+          caption: string;
+          cta: string;
+          min_gift_usd: number;
+        } | null = null;
 
         if (includeSelfie) {
           const rarity = rollProactiveRarity();
           selfieData = await pickProactiveSelfie(serviceClient, characterId, rarity, timeOfDay);
+
+          if (selfieData) {
+            try {
+              const [colCountRes, ownedRes, subRes] = await Promise.all([
+                serviceClient
+                  .from('user_selfie_collection')
+                  .select('selfie_id', { count: 'exact', head: true })
+                  .eq('user_id', userId),
+                serviceClient
+                  .from('user_selfie_collection')
+                  .select('selfie_id')
+                  .eq('user_id', userId)
+                  .eq('selfie_id', selfieData.id)
+                  .maybeSingle(),
+                serviceClient.rpc('get_active_subscription', { p_user_id: userId }),
+              ]);
+
+              const delivery = decideSelfieDelivery({
+                isFirstSelfieEver: (colCountRes.count ?? 0) === 0,
+                isLoverSubscriber: Boolean(
+                  (subRes.data as { active?: boolean } | null)?.active
+                ),
+                alreadyOwned: Boolean(ownedRes.data),
+                blurredUrl:
+                  (selfieData as { blurred_url?: string | null }).blurred_url ?? null,
+              });
+
+              if (delivery === 'blurred') {
+                const tier = ((selfieData as { tier?: string | null }).tier ?? 'free') as string;
+                const copy = SELFIE_BLUR_COPY[language === 'ko' ? 'ko' : 'en'];
+                proactiveBlurCard = {
+                  selfie_id: selfieData.id,
+                  blurred_url: (selfieData as { blurred_url?: string }).blurred_url as string,
+                  tier,
+                  caption: copy.caption,
+                  cta: copy.cta,
+                  min_gift_usd: minGiftUsdForTier(tier),
+                };
+                selfieData = null; // no unblurred attach, no collection entry
+              }
+            } catch (e) {
+              // Non-fatal: on any lookup failure fall back to the previous
+              // behavior (unblurred) rather than dropping the proactive send.
+              console.error('[Proactive] Selfie delivery decision failed (fallback unblurred):', e);
+            }
+          }
         }
 
         // Clean [SELFIE] marker from content if present
         let messageContent = msgResult.content.replace(/\[SELFIE\]/g, '').trim();
 
         // If content is empty after removing markers (Ren-style selfie-only)
-        if (!messageContent && selfieData) {
+        if (!messageContent && (selfieData || proactiveBlurCard)) {
           messageContent = '.'; // Minimal text for selfie-only messages
         } else if (!messageContent) {
           messageContent = ''; // Skip if somehow empty and no selfie
@@ -455,6 +514,7 @@ export async function GET(req: NextRequest) {
             proactive_category: category,
             memory_keys_used: msgResult.memoryKeysUsed,
             language,
+            ...(proactiveBlurCard ? { blur_teaser: proactiveBlurCard } : {}),
           },
         };
 
