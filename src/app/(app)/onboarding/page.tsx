@@ -19,6 +19,7 @@ import {
   getStoredDirectChar,
   resolveDirectCharacter,
 } from '@/lib/onboarding/direct-entry';
+import { detectPreferredLanguage } from '@/lib/onboarding/browser-language';
 
 /** Map character slug to accent color */
 function getAccentColor(slug: string): string {
@@ -140,7 +141,7 @@ function StepAge({
       return;
     }
     if (m < 1 || m > 12 || d < 1 || d > 31) {
-      setError('생년월일을 다시 확인해 주세요.');
+      setError('Please double-check your date of birth.');
       return;
     }
 
@@ -187,10 +188,10 @@ function StepAge({
           className="text-[26px] font-bold"
           style={{ color: 'var(--vm-text-primary)', letterSpacing: '-0.02em' }}
         >
-          생년월일을 알려주세요
+          When were you born?
         </h1>
         <p className="mt-3 text-[15px]" style={{ color: 'var(--vm-text-tertiary)' }}>
-          만 19세 이상만 이용할 수 있어요
+          You must be 19 or older to use VegaMate
         </p>
       </div>
 
@@ -249,11 +250,11 @@ function StepAge({
           cursor: canProceed ? 'pointer' : 'default',
         }}
       >
-        {submitting ? '확인 중...' : '다음'}
+        {submitting ? 'Checking...' : 'Next'}
       </button>
 
       <p className="text-center text-[11px] leading-relaxed" style={{ color: 'var(--vm-text-tertiary)', opacity: 0.6 }}>
-        입력하신 생년월일은 성인 인증 목적으로만 사용되며, 안전하게 보관됩니다.
+        Your date of birth is used only for adult verification and stored securely.
       </p>
     </div>
   );
@@ -274,15 +275,15 @@ function StepMinorBlock() {
           className="text-[22px] font-bold"
           style={{ color: 'var(--vm-text-primary)', letterSpacing: '-0.02em' }}
         >
-          만 19세 이상만 이용할 수 있어요
+          You must be 19 or older to use VegaMate
         </h1>
         <p
           className="mt-3 text-[15px] leading-relaxed"
           style={{ color: 'var(--vm-text-tertiary)' }}
         >
-          이 서비스는 성인 콘텐츠를 포함하고 있어
+          This service includes adult content and is not
           <br />
-          청소년은 이용할 수 없어요. 이용에 참고해 주세요.
+          available to minors. Thank you for understanding.
         </p>
       </div>
     </div>
@@ -692,7 +693,12 @@ export default function OnboardingPage() {
       await fetch('/api/profile', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ display_name: name.trim() || null }),
+        body: JSON.stringify({
+          display_name: name.trim() || null,
+          // Greeting language source — was never set, so every greeting fired
+          // in English ('en' column default) regardless of the user's browser.
+          preferred_language: detectPreferredLanguage(navigator.language),
+        }),
       });
 
       const res = await fetch('/api/conversations', {
@@ -775,7 +781,12 @@ export default function OnboardingPage() {
       await fetch('/api/profile', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ display_name: name.trim() || null }),
+        body: JSON.stringify({
+          display_name: name.trim() || null,
+          // Greeting language source — was never set, so every greeting fired
+          // in English ('en' column default) regardless of the user's browser.
+          preferred_language: detectPreferredLanguage(navigator.language),
+        }),
       });
 
       // Create conversation
