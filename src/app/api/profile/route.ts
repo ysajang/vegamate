@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { createServerSupabase, createServiceRoleClient } from '@/lib/supabase/server';
 import { apiSuccess, apiError, withErrorHandler, AppError } from '@/lib/api-utils';
 import { sanitizeString } from '@/lib/validators';
+import { SUPPORTED_PREFERRED_LANGUAGES } from '@/lib/onboarding/browser-language';
 
 // GET /api/profile -> get current user profile
 async function getHandler() {
@@ -61,6 +62,19 @@ async function patchHandler(req: NextRequest) {
       throw new AppError('Invalid gender value');
     }
     updates.user_gender = gender || null;
+  }
+
+  if ('preferred_language' in body) {
+    // Greeting/proactive language source. Strict whitelist — mirrors
+    // language-directive's supported set; anything else is rejected so a
+    // crafted value can never reach the prompt path.
+    const lang = sanitizeString(body.preferred_language);
+    if (
+      lang &&
+      (SUPPORTED_PREFERRED_LANGUAGES as readonly string[]).includes(lang)
+    ) {
+      updates.preferred_language = lang;
+    }
   }
 
   if ('timezone' in body) {
