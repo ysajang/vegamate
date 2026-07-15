@@ -4,6 +4,7 @@ import { apiSuccess, apiError, withErrorHandler, AppError } from '@/lib/api-util
 import { sanitizeString, isValidUUID } from '@/lib/validators';
 import { assertAgeVerified } from '@/lib/auth/age-guard';
 import { pickGreeting } from '@/lib/chat/greeting';
+import { planGreetingSelfie, type GreetingSelfieCandidate } from '@/lib/chat/greeting-selfie';
 
 // GET /api/conversations -> list user's conversations with character data
 async function getHandler(req: NextRequest) {
@@ -132,14 +133,75 @@ async function postHandler(req: NextRequest) {
     character.greeting_message
   );
 
+  // Greeting selfie (Notion §34): the FIRST screen proves selfie+chat with
+  // zero clicks. Attached only when this is the user's first selfie ever —
+  // it consumes the selfie-economy lifetime unblurred freebie, so later chat
+  // selfies arrive as blurred monetization cards. Best-effort: any failure
+  // here degrades to the plain text greeting, never blocks creation. The
+  // chat-route session cap / frequency guards intentionally do not apply.
+  let greetingSelfie: GreetingSelfieCandidate | null = null;
+  let lifetimeSelfieCount = 1; // safe default: no freebie unless verified 0
+  try {
+    const { count: collectionCount } = await serviceClient
+      .from('user_selfie_collection')
+      .select('selfie_id', { count: 'exact', head: true })
+      .eq('user_id', user.id);
+    lifetimeSelfieCount = collectionCount ?? 0;
+
+    if (lifetimeSelfieCount === 0) {
+      const { data: pickedId } = await serviceClient.rpc('pick_selfie_by_scene', {
+        p_character_id: character.id,
+        p_user_id: user.id,
+        p_scene: 'greeting',
+        p_allowed_tiers: ['free'],
+      });
+      if (pickedId) {
+        const { data: selfie } = await serviceClient
+          .from('selfie_pool')
+          .select('id, rarity')
+          .eq('id', pickedId as string)
+          .single();
+        if (selfie) greetingSelfie = selfie as GreetingSelfieCandidate;
+      }
+    }
+  } catch (e) {
+    console.error('[Conversations] Greeting selfie pick failed (non-fatal):', e);
+  }
+
+  const selfiePlan = planGreetingSelfie({
+    isNewConversation: true,
+    selfieCollectionCount: lifetimeSelfieCount,
+    selfie: greetingSelfie,
+    userId: user.id,
+    characterId: character.id,
+  });
+
   await serviceClient.from('messages').insert({
     conversation_id: newConversation.id,
     role: 'assistant',
-    content_type: 'text',
+    content_type: selfiePlan ? selfiePlan.contentType : 'text',
     content: greetingText,
+    ...(selfiePlan
+      ? { selfie_id: selfiePlan.selfieId, selfie_rarity: selfiePlan.rarity }
+      : {}),
     credits_consumed: 0,
-    metadata: { is_greeting: true },
+    metadata: { is_greeting: true, ...(selfiePlan ? { trigger_type: 'greeting' } : {}) },
   });
+
+  if (selfiePlan) {
+    // Mirror the chat-route unblurred delivery: collect + count the stat so
+    // the gallery shows it and the economy sees the freebie as consumed.
+    const { error: collectErr } = await serviceClient
+      .from('user_selfie_collection')
+      .upsert(selfiePlan.collectionUpsert, { onConflict: 'user_id,selfie_id' });
+    if (collectErr) {
+      console.error('[Conversations] Greeting selfie collect failed:', collectErr);
+    }
+    await serviceClient.rpc('increment_conversation_stats', {
+      p_conversation_id: newConversation.id,
+      p_is_selfie: true,
+    });
+  }
 
   // Update conversation stats
   await serviceClient

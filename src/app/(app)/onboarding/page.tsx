@@ -15,6 +15,10 @@ import {
   isAgeNotVerified,
   parseResumeCharacterId,
 } from '@/lib/onboarding/onboarding-routing';
+import {
+  getStoredDirectChar,
+  resolveDirectCharacter,
+} from '@/lib/onboarding/direct-entry';
 
 /** Map character slug to accent color */
 function getAccentColor(slug: string): string {
@@ -578,6 +582,7 @@ export default function OnboardingPage() {
   const [characters, setCharacters] = useState<DbCharacter[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [directEntering, setDirectEntering] = useState(false);
   const [checkingProfile, setCheckingProfile] = useState(true);
 
   // Decide where to start onboarding based on the AUTHORITATIVE profile state.
@@ -649,8 +654,80 @@ export default function OnboardingPage() {
       void resumeConversation(resumeCharId);
       return;
     }
-    loadCharacters();
-    setStep(2); // -> character select
+    // Direct entry (Notion §34 round 3): new signups skip the character
+    // picker — 6/11 measured churned in the picker→first-message gap while
+    // every ad features one character. Route to the advertised character
+    // (`?c=` slug, first-touch) or miku by default; the picker remains as
+    // the failure fallback and stays reachable from /select afterwards.
+    void directEnterChat();
+  }
+
+  async function directEnterChat() {
+    setIsCreating(true);
+    setDirectEntering(true);
+    let chars: DbCharacter[] = [];
+    try {
+      const res = await fetch('/api/characters');
+      const json = await res.json();
+      if (json.success) {
+        chars = json.data.characters as DbCharacter[];
+        setCharacters(chars);
+        setLoaded(true);
+      }
+    } catch {
+      // fall through to picker fallback below
+    }
+
+    const target = resolveDirectCharacter(getStoredDirectChar(), chars);
+    if (!target) {
+      // Roster unavailable — fall back to the picker rather than dead-ending.
+      setIsCreating(false);
+      setDirectEntering(false);
+      loadCharacters();
+      setStep(2);
+      return;
+    }
+
+    try {
+      await fetch('/api/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ display_name: name.trim() || null }),
+      });
+
+      const res = await fetch('/api/conversations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ character_id: target.id }),
+      });
+      const json = await res.json();
+
+      if (json.success) {
+        trackEvent('CompleteRegistration');
+        void trackFunnelEvent('signup_complete', {
+          path: 'direct',
+          character: target.slug,
+        });
+        router.push(`/chat/${json.data.conversation.id}`);
+        return;
+      }
+
+      if (isAgeNotVerified(json)) {
+        setIsCreating(false);
+        setDirectEntering(false);
+        setStep(stepToIndex(recoverStepOnAgeBlocked()));
+        return;
+      }
+
+      // Creation failed (character deactivated, etc.) — picker fallback.
+      setIsCreating(false);
+      setDirectEntering(false);
+      setStep(2);
+    } catch {
+      setIsCreating(false);
+      setDirectEntering(false);
+      setStep(2);
+    }
   }
 
   async function resumeConversation(characterId: string) {
@@ -733,7 +810,7 @@ export default function OnboardingPage() {
     }
   }
 
-  if (checkingProfile) {
+  if (checkingProfile || directEntering) {
     return (
       <main
         className="flex h-dvh items-center justify-center"
