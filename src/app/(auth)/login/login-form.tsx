@@ -44,6 +44,9 @@ function LoginContent() {
         email: trimmed,
         options: {
           emailRedirectTo: `${window.location.origin}/api/auth/callback`,
+          // Sunset (2026-07-18): service is closed to new users. Magic links
+          // are only issued for accounts that already exist.
+          shouldCreateUser: false,
         },
       });
 
@@ -51,10 +54,16 @@ function LoginContent() {
 
       if (error) {
         console.error('[Magic Link Error]', error.message);
+        // shouldCreateUser: false -> Supabase rejects unknown emails with
+        // "Signups not allowed for otp" (422). Surface it as a closure notice.
+        const signupsClosed =
+          error.status === 422 || /signups? not allowed/i.test(error.message);
         setEmailError(
           error.status === 429
             ? 'Too many attempts. Please wait a minute and try again.'
-            : 'Could not send the link. Please try again.'
+            : signupsClosed
+              ? 'VegaMate is closed to new signups. Existing accounts can still sign in.'
+              : 'Could not send the link. Please try again.'
         );
         return;
       }
@@ -75,7 +84,9 @@ function LoginContent() {
 
       {errorParam && (
         <p className="text-sm text-destructive">
-          Something went wrong. Please try again.
+          {errorParam === 'signups_closed'
+            ? 'VegaMate is closed to new signups. Existing accounts can still sign in.'
+            : 'Something went wrong. Please try again.'}
         </p>
       )}
 

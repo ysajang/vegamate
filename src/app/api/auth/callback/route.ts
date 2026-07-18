@@ -72,6 +72,18 @@ export async function GET(request: Request) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Sunset gate (2026-07-18): closed to new users. OAuth auto-creates
+  // accounts before we can intercept, so reject anything created after the
+  // cutoff server-side and drop the session. Existing users are unaffected.
+  // Belt-and-suspenders with the Supabase dashboard "Allow new users to
+  // sign up" toggle (Auth > Providers), which should also be OFF.
+  const SIGNUP_CUTOFF = Date.parse('2026-07-18T00:00:00Z');
+
+  if (user && Date.parse(user.created_at) >= SIGNUP_CUTOFF) {
+    await supabase.auth.signOut();
+    return NextResponse.redirect(`${origin}/login?error=signups_closed`);
+  }
+
   if (user) {
     const { data: profile } = await supabase
       .from('profiles')
