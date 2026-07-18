@@ -1,20 +1,23 @@
-import { type NextRequest } from 'next/server';
-import { updateSession } from '@/lib/supabase/middleware';
+import { NextResponse, type NextRequest } from 'next/server';
 
+/**
+ * Sunset proxy (2026-07-18). Supabase is paused, so auth/session refresh
+ * and every data route would error. Redirect all traffic to the static
+ * notice at "/". Static assets are excluded by the matcher.
+ */
 export async function proxy(request: NextRequest) {
-  return await updateSession(request);
+  const { pathname } = request.nextUrl;
+  if (pathname === '/') return NextResponse.next();
+  return NextResponse.redirect(new URL('/', request.url), 308);
 }
 
 export const config = {
   matcher: [
     /*
      * Match all request paths except:
-     * - _next/static (static files)
-     * - _next/image (image optimization)
-     * - favicon.ico (favicon)
-     * - public folder assets
-     * - API webhook routes (no auth needed)
+     * - _next internals (static files, image optimization)
+     * - favicon / icons / images / manifest / service worker
      */
-    '/((?!_next/static|_next/image|favicon.ico|icons/|images/|manifest.json|sw.js|api/webhooks).*)',
+    '/((?!_next/|favicon.ico|icons/|images/|manifest.json|sw.js|.*\\..*).*)',
   ],
 };
